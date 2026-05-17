@@ -133,7 +133,21 @@ button.danger:hover { background: #fdecec; }
 .person-card .name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
 .person-card .surnames { color: var(--text-soft); font-size: 13px; margin-bottom: 6px; }
 .person-card .dates { font-size: 12px; color: var(--text-soft); }
+.person-card .date-badges { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .person-card .branches { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+.date-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-soft); color: var(--text); border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.date-badge.birth { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+.date-badge.death { color: #6b7280; border-color: #e5e7eb; background: #f9fafb; }
+.anniv-badge {
+  font-size: 12px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff; border-radius: 999px;
+  padding: 2px 8px; font-weight: 700;
+}
 .branch-tag {
   font-size: 10px; padding: 2px 7px; border-radius: 999px; color: #fff; font-weight: 600;
   letter-spacing: .3px;

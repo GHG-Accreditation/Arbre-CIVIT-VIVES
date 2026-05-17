@@ -10,7 +10,7 @@ const State = {
   people: [],
   branches: [],
   places: {},
-  filter: { query: "", branches: new Set(), onlyRel: false, sort: "surname" },
+  filter: { query: "", branches: new Set(), onlyRel: false, onlyDates: false, todayAnniv: false, sort: "surname" },
   view: "list",
   editingId: null,
   picker: { active: false, mode: null, onPick: null },
@@ -102,8 +102,55 @@ function surnameKey(p) {
   return `${(p.surname1||"").toLowerCase()} ${(p.surname2||"").toLowerCase()} ${(p.firstName||"").toLowerCase()}`;
 }
 function lifeSpan(p) {
-  if (!p.birthYear && !p.deathYear) return "";
-  return `${p.birthYear || "?"} – ${p.deathYear || ""}`.replace(/–\s*$/, "– …");
+  const b = formatLifeDate(p.birthDateFull, p.birthYear);
+  const d = formatLifeDate(p.deathDateFull, p.deathYear);
+  if (!b && !d) return "";
+  return `${b || "?"} – ${d || "…"}`;
+}
+
+const MONTHS_CA = ["gen","feb","març","abr","maig","juny","jul","ago","set","oct","nov","des"];
+
+function parseDDMMYYYY(s) {
+  if (!s) return null;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s).trim());
+  if (!m) return null;
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  return { d, m: mo, y };
+}
+
+function normalizeDateInput(raw) {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  const m = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(s);
+  if (!m) return "";
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return "";
+  return `${String(d).padStart(2,"0")}/${String(mo).padStart(2,"0")}/${y}`;
+}
+
+function formatLifeDate(dateFull, yearFallback) {
+  const dt = parseDDMMYYYY(dateFull);
+  if (dt) return `${dt.d} ${MONTHS_CA[dt.m - 1]} ${dt.y}`;
+  if (yearFallback) return String(yearFallback);
+  return "";
+}
+
+function formatDayMonth(dateFull) {
+  const dt = parseDDMMYYYY(dateFull);
+  if (!dt) return "";
+  return `${dt.d} ${MONTHS_CA[dt.m - 1]}`;
+}
+
+function todayKey() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+function dateDayMonth(dateFull) {
+  const dt = parseDDMMYYYY(dateFull);
+  if (!dt) return null;
+  return `${String(dt.d).padStart(2,"0")}/${String(dt.m).padStart(2,"0")}`;
 }
 function childrenOf(id) {
   return State.people.filter(p => Array.isArray(p.parentIds) && p.parentIds.includes(id));
@@ -179,6 +226,13 @@ function matchesFilter(p) {
                 childrenOf(p.id).length > 0;
     if (!has) return false;
   }
+  if (f.onlyDates) {
+    if (!p.birthDateFull && !p.deathDateFull) return false;
+  }
+  if (f.todayAnniv) {
+    const td = todayKey();
+    if (dateDayMonth(p.birthDateFull) !== td && dateDayMonth(p.deathDateFull) !== td) return false;
+  }
   if (f.query) {
     const q = f.query.toLowerCase();
     const hay = `${p.firstName} ${p.surname1} ${p.surname2} ${p.birthPlace||""} ${p.deathPlace||""} ${p.birthYear||""} ${p.deathYear||""}`.toLowerCase();
@@ -222,7 +276,14 @@ function renderPeopleList() {
     const places = [p.birthPlace, p.deathPlace].filter(Boolean).join(" → ");
     const dates = (span || places) ? `<div class="dates">${escapeHtml(span)}${span && places ? " · " : ""}${escapeHtml(places)}</div>` : "";
     const tags = (p.branches||[]).map(k => `<span class="branch-tag ${k}">${branchShort(k)}</span>`).join("");
-    card.innerHTML = `${names}${surnames}${dates}${tags ? `<div class="branches">${tags}</div>` : ""}`;
+    const td = todayKey();
+    const isAnniv = dateDayMonth(p.birthDateFull) === td || dateDayMonth(p.deathDateFull) === td;
+    const annivBadge = isAnniv ? `<span class="anniv-badge" title="Aniversari avui">★</span>` : "";
+    const dateBadges = [];
+    if (p.birthDateFull) dateBadges.push(`<span class="date-badge birth" title="Naixement">★ ${escapeHtml(formatDayMonth(p.birthDateFull))}</span>`);
+    if (p.deathDateFull) dateBadges.push(`<span class="date-badge death" title="Defunció">† ${escapeHtml(formatDayMonth(p.deathDateFull))}</span>`);
+    const badgesHtml = dateBadges.length ? `<div class="date-badges">${dateBadges.join("")}${annivBadge}</div>` : (annivBadge ? `<div class="date-badges">${annivBadge}</div>` : "");
+    card.innerHTML = `${names}${surnames}${dates}${badgesHtml}${tags ? `<div class="branches">${tags}</div>` : ""}`;
     card.addEventListener("click", () => openDetail(p.id));
     frag.appendChild(card);
   }
@@ -241,8 +302,10 @@ function openDetail(id) {
   $("#f-surname2").value = p?.surname2 || "";
   $("#f-birthPlace").value = p?.birthPlace || "";
   $("#f-birthYear").value = p?.birthYear || "";
+  $("#f-birthDateFull").value = p?.birthDateFull || "";
   $("#f-deathPlace").value = p?.deathPlace || "";
   $("#f-deathYear").value = p?.deathYear || "";
+  $("#f-deathDateFull").value = p?.deathDateFull || "";
   $("#f-notes").value = p?.notes || "";
 
   const br = $("#f-branches");
@@ -383,19 +446,33 @@ function renderPickerResults(q) {
 
 function saveCurrent(silent = false) {
   const id = $("#f-id").value || null;
+  const birthDateFull = normalizeDateInput($("#f-birthDateFull").value);
+  const deathDateFull = normalizeDateInput($("#f-deathDateFull").value);
+  const birthDateParsed = parseDDMMYYYY(birthDateFull);
+  const deathDateParsed = parseDDMMYYYY(deathDateFull);
   const data = {
     firstName: $("#f-firstName").value.trim(),
     surname1: $("#f-surname1").value.trim(),
     surname2: $("#f-surname2").value.trim(),
     birthPlace: $("#f-birthPlace").value.trim(),
-    birthYear: intOrNull($("#f-birthYear").value),
+    birthDateFull: birthDateFull || null,
+    birthYear: birthDateParsed ? birthDateParsed.y : intOrNull($("#f-birthYear").value),
     deathPlace: $("#f-deathPlace").value.trim(),
-    deathYear: intOrNull($("#f-deathYear").value),
+    deathDateFull: deathDateFull || null,
+    deathYear: deathDateParsed ? deathDateParsed.y : intOrNull($("#f-deathYear").value),
     notes: $("#f-notes").value.trim(),
     branches: $$("#f-branches .chip.active").map(c => c.dataset.key),
     parentIds: readRelIds("#f-parents"),
     spouseIds: readRelIds("#f-spouses"),
   };
+  if (($("#f-birthDateFull").value || "").trim() && !birthDateFull) {
+    if (!silent) toast("Format de data de naixement no vàlid (cal DD/MM/AAAA)");
+    return false;
+  }
+  if (($("#f-deathDateFull").value || "").trim() && !deathDateFull) {
+    if (!silent) toast("Format de data de defunció no vàlid (cal DD/MM/AAAA)");
+    return false;
+  }
   if (!data.firstName && !data.surname1 && !data.surname2) {
     if (!silent) toast("Cal almenys un nom o cognom");
     return false;
@@ -940,6 +1017,8 @@ function wireEvents() {
   $("#search").addEventListener("input", (e) => { State.filter.query = e.target.value; renderPeopleList(); });
   $("#sort").addEventListener("change", (e) => { State.filter.sort = e.target.value; renderPeopleList(); });
   $("#only-rel").addEventListener("change", (e) => { State.filter.onlyRel = e.target.checked; renderPeopleList(); });
+  $("#only-dates").addEventListener("change", (e) => { State.filter.onlyDates = e.target.checked; renderPeopleList(); });
+  $("#today-anniv").addEventListener("change", (e) => { State.filter.todayAnniv = e.target.checked; renderPeopleList(); });
 
   $("#btn-add").addEventListener("click", () => openDetail(null));
   $("#btn-close-detail").addEventListener("click", () => closeDetail());

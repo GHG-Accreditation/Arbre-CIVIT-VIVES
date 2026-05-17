@@ -45,6 +45,12 @@
       <label class="only-rel">
         <input type="checkbox" id="only-rel"> Només amb relacions
       </label>
+      <label class="only-rel">
+        <input type="checkbox" id="only-dates"> Només amb data completa
+      </label>
+      <label class="only-rel">
+        <input type="checkbox" id="today-anniv"> Aniversaris d'avui
+      </label>
     </div>
     <div id="branch-chips" class="chips"></div>
     <div class="counter"><span id="visible-count">0</span> de <span id="total-count">0</span> persones</div>
@@ -126,14 +132,20 @@
       <legend>Naixement</legend>
       <div class="row two">
         <label>Lloc<input id="f-birthPlace" type="text"></label>
-        <label>Any<input id="f-birthYear" type="number" min="1300" max="2100"></label>
+        <label>Data (DD/MM/AAAA)<input id="f-birthDateFull" type="text" placeholder="p.ex. 16/09/1607" pattern="\d{1,2}/\d{1,2}/\d{4}"></label>
+      </div>
+      <div class="row">
+        <label>Si només saps l'any: <input id="f-birthYear" type="number" min="1300" max="2100" placeholder="p.ex. 1607"></label>
       </div>
     </fieldset>
     <fieldset>
       <legend>Defunció</legend>
       <div class="row two">
         <label>Lloc<input id="f-deathPlace" type="text"></label>
-        <label>Any<input id="f-deathYear" type="number" min="1300" max="2100"></label>
+        <label>Data (DD/MM/AAAA)<input id="f-deathDateFull" type="text" placeholder="p.ex. 14/10/1674" pattern="\d{1,2}/\d{1,2}/\d{4}"></label>
+      </div>
+      <div class="row">
+        <label>Si només saps l'any: <input id="f-deathYear" type="number" min="1300" max="2100" placeholder="p.ex. 1674"></label>
       </div>
     </fieldset>
     <div class="row">
