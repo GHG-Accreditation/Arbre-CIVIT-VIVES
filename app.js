@@ -166,6 +166,9 @@ function placeKey(v) {
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
+function fold(s) {
+  return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
 function branchShort(key) {
   const b = State.branches.find(x => x.key === key);
   if (!b) return key;
@@ -234,8 +237,8 @@ function matchesFilter(p) {
     if (dateDayMonth(p.birthDateFull) !== td && dateDayMonth(p.deathDateFull) !== td) return false;
   }
   if (f.query) {
-    const q = f.query.toLowerCase();
-    const hay = `${p.firstName} ${p.surname1} ${p.surname2} ${p.birthPlace||""} ${p.deathPlace||""} ${p.birthYear||""} ${p.deathYear||""}`.toLowerCase();
+    const q = fold(f.query);
+    const hay = fold(`${p.firstName} ${p.surname1} ${p.surname2} ${p.birthPlace||""} ${p.deathPlace||""} ${p.birthYear||""} ${p.deathYear||""}`);
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -419,12 +422,12 @@ function closePicker() {
 
 function renderPickerResults(q) {
   const root = $("#picker-results");
-  const query = q.trim().toLowerCase();
+  const query = fold(q.trim());
   const filtered = State.people
     .filter(p => {
       if (State.editingId && p.id === State.editingId) return false;
       if (!query) return true;
-      return `${p.firstName} ${p.surname1} ${p.surname2}`.toLowerCase().includes(query);
+      return fold(`${p.firstName} ${p.surname1} ${p.surname2}`).includes(query);
     })
     .sort(compareForSort)
     .slice(0, 80);
