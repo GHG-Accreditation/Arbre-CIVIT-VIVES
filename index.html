@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arbre Genealògic — Família Civit · Vives</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>Arbre Genealògic</h1>
+    <span class="subtitle">Família Civit · Vives</span>
+  </div>
+  <div class="actions">
+    <button id="btn-add" class="primary">+ Nova persona</button>
+    <button id="btn-export" title="Descarregar JSON">Exportar</button>
+    <button id="btn-import" title="Carregar JSON">Importar</button>
+    <button id="btn-reset" class="danger" title="Tornar a les dades originals">Reiniciar</button>
+    <input id="file-import" type="file" accept="application/json" hidden>
+  </div>
+</header>
+
+<section class="controls">
+  <input id="search" type="search" placeholder="Cerca per nom, cognom, lloc o any…" autofocus>
+  <div class="sortbar">
+    <label>Ordena per:
+      <select id="sort">
+        <option value="surname">Cognoms</option>
+        <option value="firstName">Nom</option>
+        <option value="birthYear">Any naixement (asc)</option>
+        <option value="birthYearDesc">Any naixement (desc)</option>
+      </select>
+    </label>
+    <label class="only-rel">
+      <input type="checkbox" id="only-rel"> Només amb relacions
+    </label>
+  </div>
+  <div id="branch-chips" class="chips"></div>
+  <div class="counter"><span id="visible-count">0</span> de <span id="total-count">0</span> persones</div>
+</section>
+
+<main>
+  <div id="people-list" class="people-list" aria-live="polite"></div>
+</main>
+
+<aside id="detail-panel" class="detail-panel hidden" aria-hidden="true">
+  <div class="detail-header">
+    <h2 id="detail-title">Detall</h2>
+    <button id="btn-close-detail" aria-label="Tancar">×</button>
+  </div>
+  <form id="detail-form" class="detail-form">
+    <input type="hidden" id="f-id">
+    <div class="row">
+      <label>Nom<input id="f-firstName" type="text" required></label>
+    </div>
+    <div class="row two">
+      <label>Cognom 1<input id="f-surname1" type="text"></label>
+      <label>Cognom 2<input id="f-surname2" type="text"></label>
+    </div>
+    <fieldset>
+      <legend>Naixement</legend>
+      <div class="row two">
+        <label>Lloc<input id="f-birthPlace" type="text"></label>
+        <label>Any<input id="f-birthYear" type="number" min="1300" max="2100"></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Defunció</legend>
+      <div class="row two">
+        <label>Lloc<input id="f-deathPlace" type="text"></label>
+        <label>Any<input id="f-deathYear" type="number" min="1300" max="2100"></label>
+      </div>
+    </fieldset>
+    <div class="row">
+      <label>Branques / arbres
+        <div id="f-branches" class="chips inset"></div>
+      </label>
+    </div>
+    <fieldset>
+      <legend>Relacions</legend>
+      <div class="rel-block">
+        <div class="rel-label">Pares</div>
+        <div id="f-parents" class="rel-list"></div>
+        <button type="button" class="link-btn" data-add="parents">+ Afegir pare/mare</button>
+      </div>
+      <div class="rel-block">
+        <div class="rel-label">Cònjuges</div>
+        <div id="f-spouses" class="rel-list"></div>
+        <button type="button" class="link-btn" data-add="spouses">+ Afegir cònjuge</button>
+      </div>
+      <div class="rel-block">
+        <div class="rel-label">Fills (derivat dels pares)</div>
+        <div id="f-children" class="rel-list readonly"></div>
+      </div>
+    </fieldset>
+    <div class="row">
+      <label>Notes<textarea id="f-notes" rows="4"></textarea></label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary">Desar</button>
+      <button type="button" id="btn-delete" class="danger">Eliminar</button>
+      <button type="button" id="btn-cancel">Cancel·lar</button>
+    </div>
+  </form>
+</aside>
+
+<div id="picker-overlay" class="overlay hidden">
+  <div class="picker">
+    <div class="picker-header">
+      <h3 id="picker-title">Triar persona</h3>
+      <button id="picker-close" aria-label="Tancar">×</button>
+    </div>
+    <input id="picker-search" type="search" placeholder="Cerca per nom o cognom…" autofocus>
+    <div id="picker-results" class="picker-results"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
