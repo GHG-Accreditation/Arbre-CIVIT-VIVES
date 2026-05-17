@@ -19,6 +19,32 @@ python3 -m http.server 8000
 > Si obres l'app sense connexió a internet, la **vista de Mapa** no carregarà
 > els tiles d'OpenStreetMap. La resta funciona en local.
 
+## Desplegar a Vercel (URL pública)
+
+Per a tenir-la accessible des de qualsevol dispositiu (mòbil, etc.):
+
+### Opció A — des de la web de Vercel (la més fàcil)
+1. Entra a https://vercel.com/new
+2. Inicia sessió amb GitHub
+3. **Import Project** → tria el repositori `Claude-2`
+4. A "Branch", canvia a `claude/genealogy-tree-app-mw2SM` (o fes merge a `main` abans)
+5. Framework Preset: **Other** · Build Command: *(buit)* · Output Directory: *(buit)*
+6. **Deploy** — en 30 segons tindràs una URL tipus `arbre-genealogic.vercel.app`
+
+### Opció B — des de la línia de comandes
+```bash
+git clone -b claude/genealogy-tree-app-mw2SM https://github.com/GHG-Accreditation/Claude-2.git
+cd Claude-2
+npx vercel        # primer cop: fer login amb el navegador
+npx vercel --prod # quan vulguis publicar la versió final
+```
+
+Vercel detecta automàticament que és una web estàtica (té `vercel.json`
+amb les capçaleres de cache). Cap configuració addicional necessària.
+
+> Cada push a la branca crea automàticament una nova preview-URL si tens
+> la integració de GitHub activada.
+
 ## Tres vistes
 
 ### 1. Llista
