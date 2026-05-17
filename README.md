@@ -19,6 +19,24 @@ python3 -m http.server 8000
 > Si obres l'app sense connexió a internet, la **vista de Mapa** no carregarà
 > els tiles d'OpenStreetMap. La resta funciona en local.
 
+## Desplegar a GitHub Pages (1 click, automàtic)
+
+El repositori ja inclou un workflow (`.github/workflows/deploy-pages.yml`)
+que publica l'app cada cop que es fa un push. Només cal **activar Pages
+una vegada** al repositori:
+
+1. Ves a **Settings → Pages** (a github.com/GHG-Accreditation/Arbre-CIVIT-VIVES/settings/pages)
+2. A *Source* tria: **GitHub Actions**
+3. Guarda.
+
+A partir d'aquí, cada `git push` a `main` o a `claude/genealogy-tree-app-mw2SM`
+publicarà automàticament. URL final:
+
+> `https://ghg-accreditation.github.io/Arbre-CIVIT-VIVES/`
+
+(També pots disparar el deploy a mà des de la pestanya **Actions →
+Deploy to GitHub Pages → Run workflow**.)
+
 ## Desplegar a Vercel (URL pública)
 
 Per a tenir-la accessible des de qualsevol dispositiu (mòbil, etc.):
