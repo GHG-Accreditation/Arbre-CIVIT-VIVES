@@ -1009,6 +1009,210 @@ function importJson(file) {
   reader.readAsText(file);
 }
 
+/* ---------- CSV (human-editable) ---------- */
+// Columns: id, nom, cognom1, cognom2, naixement_data, naixement_lloc,
+//          defuncio_data, defuncio_lloc, branques, pare_id, mare_id,
+//          conjuges, notes
+// - Separator auto-detected (comma or semicolon).
+// - Multi-value cells use the pipe '|' (e.g. "civit|vives").
+// - Dates: "DD/MM/AAAA" or just "AAAA". Empty = unknown.
+// - IDs are free text slugs; references must match another row's id.
+
+const CSV_HEADER = ["id","nom","cognom1","cognom2","naixement_data","naixement_lloc","defuncio_data","defuncio_lloc","branques","pare_id","mare_id","conjuges","notes"];
+
+function csvEscape(v) {
+  const s = String(v ?? "");
+  return /[,;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function csvParse(text) {
+  text = text.replace(/^﻿/, "");
+  const head = text.split(/\r?\n/, 1)[0] || "";
+  const sep = (head.match(/;/g) || []).length > (head.match(/,/g) || []).length ? ";" : ",";
+  const rows = [];
+  let cur = [""];
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i+1] === '"') { cur[cur.length-1] += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else cur[cur.length-1] += c;
+    } else {
+      if (c === '"' && cur[cur.length-1] === "") inQ = true;
+      else if (c === sep) cur.push("");
+      else if (c === "\n") { rows.push(cur); cur = [""]; }
+      else if (c === "\r") {}
+      else cur[cur.length-1] += c;
+    }
+  }
+  if (cur.length > 1 || cur[0] !== "") rows.push(cur);
+  return rows;
+}
+
+function slugify(s) {
+  return fold(s).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function makeReadableId(p, used) {
+  const parts = [p.surname1, p.surname2, p.firstName, p.birthYear].filter(Boolean);
+  let base = slugify(parts.join(" ")) || "persona";
+  let id = base, n = 1;
+  while (used.has(id)) id = `${base}-${++n}`;
+  used.add(id);
+  return id;
+}
+
+function exportCsv() {
+  const used = new Set();
+  const idMap = new Map();
+  for (const p of State.people) idMap.set(p.id, makeReadableId(p, used));
+  const lines = [CSV_HEADER.join(",")];
+  for (const p of State.people) {
+    const [fId, mId] = p.parentIds || [];
+    const row = [
+      idMap.get(p.id),
+      p.firstName || "",
+      p.surname1 || "",
+      p.surname2 || "",
+      p.birthDateFull || (p.birthYear != null ? String(p.birthYear) : ""),
+      p.birthPlace || "",
+      p.deathDateFull || (p.deathYear != null ? String(p.deathYear) : ""),
+      p.deathPlace || "",
+      (p.branches || []).join("|"),
+      fId ? (idMap.get(fId) || "") : "",
+      mId ? (idMap.get(mId) || "") : "",
+      (p.spouseIds || []).map(id => idMap.get(id) || "").filter(Boolean).join("|"),
+      p.notes || "",
+    ];
+    lines.push(row.map(csvEscape).join(","));
+  }
+  const blob = new Blob(["﻿" + lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const today = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = `arbre-genealogic-${today}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast("CSV exportat");
+}
+
+function downloadCsvTemplate() {
+  const sample = [
+    CSV_HEADER.join(","),
+    "joan-civit-1850,Joan,Civit,Vives,12/03/1850,Cornudella,05/11/1920,Reus,civit|ld,pere-civit-1820,maria-vives-1825,anna-marti-1855,Exemple — esborra aquesta fila",
+    "pere-civit-1820,Pere,Civit,,1820,Cornudella,,,civit,,,maria-vives-1825,",
+    "maria-vives-1825,Maria,Vives,,1825,Reus,,,vives,,,pere-civit-1820,",
+    "anna-marti-1855,Anna,Martí,,1855,Reus,,,,,,joan-civit-1850,",
+  ].join("\n");
+  const blob = new Blob(["﻿" + sample + "\n"], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "plantilla-genealogia.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast("Plantilla descarregada");
+}
+
+function importCsv(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rows = csvParse(reader.result).filter(r => r.some(c => c.trim() !== ""));
+      if (!rows.length) throw new Error("CSV buit");
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const colIdx = Object.fromEntries(CSV_HEADER.map(k => [k, header.indexOf(k)]));
+      const missing = CSV_HEADER.filter(k => colIdx[k] === -1 && !["notes","conjuges","pare_id","mare_id","branques","defuncio_data","defuncio_lloc","naixement_lloc"].includes(k));
+      if (missing.length) throw new Error(`Falten columnes obligatòries: ${missing.join(", ")}`);
+
+      const validBranches = new Set(State.branches.map(b => b.key));
+      const peopleByCsvId = new Map();
+      const people = [];
+      const warnings = [];
+
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const get = k => colIdx[k] >= 0 ? (row[colIdx[k]] || "").trim() : "";
+        const rawId = get("id");
+        if (!rawId && !get("nom") && !get("cognom1") && !get("cognom2")) continue;
+        const id = rawId || `row-${r}`;
+        if (peopleByCsvId.has(id)) { warnings.push(`Fila ${r+1}: id duplicat "${id}"`); continue; }
+        const birthDate = get("naixement_data");
+        const deathDate = get("defuncio_data");
+        const birthY = /^\d{4}$/.test(birthDate) ? parseInt(birthDate, 10) : (parseDDMMYYYY(birthDate)?.y ?? null);
+        const deathY = /^\d{4}$/.test(deathDate) ? parseInt(deathDate, 10) : (parseDDMMYYYY(deathDate)?.y ?? null);
+        const branches = get("branques").split("|").map(s => s.trim()).filter(Boolean);
+        for (const b of branches) if (!validBranches.has(b)) warnings.push(`Fila ${r+1}: branca desconeguda "${b}"`);
+        const p = {
+          id,
+          firstName: get("nom"),
+          surname1: get("cognom1"),
+          surname2: get("cognom2"),
+          birthDateFull: /^\d{2}\/\d{2}\/\d{4}$/.test(birthDate) ? birthDate : null,
+          birthYear: birthY,
+          birthPlace: get("naixement_lloc"),
+          deathDateFull: /^\d{2}\/\d{2}\/\d{4}$/.test(deathDate) ? deathDate : null,
+          deathYear: deathY,
+          deathPlace: get("defuncio_lloc"),
+          branches,
+          notes: get("notes"),
+          _pareId: get("pare_id"),
+          _mareId: get("mare_id"),
+          _conjuges: get("conjuges").split("|").map(s => s.trim()).filter(Boolean),
+          parentIds: [],
+          spouseIds: [],
+        };
+        peopleByCsvId.set(id, p);
+        people.push(p);
+      }
+
+      let brokenRefs = 0;
+      for (const p of people) {
+        if (p._pareId) {
+          if (peopleByCsvId.has(p._pareId)) p.parentIds.push(p._pareId);
+          else { brokenRefs++; warnings.push(`"${p.id}": pare_id "${p._pareId}" no existeix`); }
+        }
+        if (p._mareId) {
+          if (peopleByCsvId.has(p._mareId)) p.parentIds.push(p._mareId);
+          else { brokenRefs++; warnings.push(`"${p.id}": mare_id "${p._mareId}" no existeix`); }
+        }
+        for (const c of p._conjuges) {
+          if (peopleByCsvId.has(c)) {
+            if (!p.spouseIds.includes(c)) p.spouseIds.push(c);
+            const sp = peopleByCsvId.get(c);
+            if (!sp.spouseIds.includes(p.id)) sp.spouseIds.push(p.id);
+          } else {
+            brokenRefs++; warnings.push(`"${p.id}": cònjuge "${c}" no existeix`);
+          }
+        }
+        delete p._pareId; delete p._mareId; delete p._conjuges;
+      }
+
+      const summary = [
+        `Importar ${people.length} persones?`,
+        brokenRefs ? `${brokenRefs} referències invàlides (s'ignoraran).` : `Totes les referències són correctes.`,
+        warnings.length > 8 ? warnings.slice(0, 8).join("\n") + `\n…i ${warnings.length-8} avisos més (consola).` : warnings.join("\n"),
+        ``,
+        `ATENCIÓ: això substituirà totes les dades actuals.`,
+      ].filter(Boolean).join("\n\n");
+      if (warnings.length) console.warn("Avisos d'import CSV:\n" + warnings.join("\n"));
+      if (!confirm(summary)) return;
+
+      State.people = people;
+      // Recompute branch counts and places from imported data if needed (existing app will do this naturally on render).
+      persist();
+      renderAll();
+      if (State.view === "tree") renderTree();
+      if (State.view === "map") drawMap();
+      toast(`Importades ${people.length} persones`);
+    } catch (e) {
+      alert("No s'ha pogut importar el CSV: " + e.message);
+      console.error(e);
+    }
+  };
+  reader.readAsText(file);
+}
+
 /* ============== Wiring ============== */
 
 function renderAll() {
@@ -1050,6 +1254,13 @@ function wireEvents() {
     if (e.target.files && e.target.files[0]) importJson(e.target.files[0]);
     e.target.value = "";
   });
+  $("#btn-export-csv").addEventListener("click", exportCsv);
+  $("#btn-import-csv").addEventListener("click", () => $("#file-import-csv").click());
+  $("#file-import-csv").addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) importCsv(e.target.files[0]);
+    e.target.value = "";
+  });
+  $("#btn-csv-template").addEventListener("click", downloadCsvTemplate);
   $("#btn-reset").addEventListener("click", resetData);
 
   $$(".view-tabs .tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
