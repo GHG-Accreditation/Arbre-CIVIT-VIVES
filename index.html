@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Arbre Genealògic — Família Civit · Vives</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -12,6 +15,11 @@
     <h1>Arbre Genealògic</h1>
     <span class="subtitle">Família Civit · Vives</span>
   </div>
+  <nav class="view-tabs" role="tablist">
+    <button class="tab active" data-view="list">Llista</button>
+    <button class="tab" data-view="tree">Arbre</button>
+    <button class="tab" data-view="map">Mapa</button>
+  </nav>
   <div class="actions">
     <button id="btn-add" class="primary">+ Nova persona</button>
     <button id="btn-export" title="Descarregar JSON">Exportar</button>
@@ -21,33 +29,89 @@
   </div>
 </header>
 
-<section class="controls">
-  <input id="search" type="search" placeholder="Cerca per nom, cognom, lloc o any…" autofocus>
-  <div class="sortbar">
-    <label>Ordena per:
-      <select id="sort">
-        <option value="surname">Cognoms</option>
-        <option value="firstName">Nom</option>
-        <option value="birthYear">Any naixement (asc)</option>
-        <option value="birthYearDesc">Any naixement (desc)</option>
-      </select>
-    </label>
-    <label class="only-rel">
-      <input type="checkbox" id="only-rel"> Només amb relacions
-    </label>
+<!-- ============ LIST VIEW ============ -->
+<section id="view-list" class="view active">
+  <div class="controls">
+    <input id="search" type="search" placeholder="Cerca per nom, cognom, lloc o any…" autofocus>
+    <div class="sortbar">
+      <label>Ordena per:
+        <select id="sort">
+          <option value="surname">Cognoms</option>
+          <option value="firstName">Nom</option>
+          <option value="birthYear">Any naixement (asc)</option>
+          <option value="birthYearDesc">Any naixement (desc)</option>
+        </select>
+      </label>
+      <label class="only-rel">
+        <input type="checkbox" id="only-rel"> Només amb relacions
+      </label>
+    </div>
+    <div id="branch-chips" class="chips"></div>
+    <div class="counter"><span id="visible-count">0</span> de <span id="total-count">0</span> persones</div>
   </div>
-  <div id="branch-chips" class="chips"></div>
-  <div class="counter"><span id="visible-count">0</span> de <span id="total-count">0</span> persones</div>
+  <main>
+    <div id="people-list" class="people-list" aria-live="polite"></div>
+  </main>
 </section>
 
-<main>
-  <div id="people-list" class="people-list" aria-live="polite"></div>
-</main>
+<!-- ============ TREE VIEW ============ -->
+<section id="view-tree" class="view">
+  <div class="tree-controls">
+    <button id="tree-pick" class="primary">Triar persona…</button>
+    <span class="tree-current" id="tree-current">— cap persona seleccionada —</span>
+    <div class="tree-spacer"></div>
+    <label>Generacions amunt:
+      <select id="tree-gens-up">
+        <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
+      </select>
+    </label>
+    <label>Generacions avall:
+      <select id="tree-gens-down">
+        <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
+      </select>
+    </label>
+    <button id="tree-fit" title="Ajustar a la pantalla">Ajustar</button>
+    <button id="tree-reset" title="Reiniciar zoom">100%</button>
+  </div>
+  <div id="tree-canvas" class="tree-canvas">
+    <svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="tree-empty" class="empty-state">
+      Tria una persona per veure l'arbre. La majoria de relacions s'han extret
+      automàticament dels Excels originals; en falten algunes que pots completar
+      des de la vista de Llista.
+    </div>
+  </div>
+</section>
 
+<!-- ============ MAP VIEW ============ -->
+<section id="view-map" class="view">
+  <div class="map-controls">
+    <span id="map-stats" class="map-stats">—</span>
+    <div class="tree-spacer"></div>
+    <label>Filtre branca:
+      <select id="map-branch">
+        <option value="">Totes</option>
+      </select>
+    </label>
+    <label>Tipus:
+      <select id="map-kind">
+        <option value="both">Naixement i defunció</option>
+        <option value="birth">Naixements</option>
+        <option value="death">Defuncions</option>
+      </select>
+    </label>
+  </div>
+  <div id="map-canvas" class="map-canvas"></div>
+</section>
+
+<!-- ============ DETAIL PANEL (shared) ============ -->
 <aside id="detail-panel" class="detail-panel hidden" aria-hidden="true">
   <div class="detail-header">
     <h2 id="detail-title">Detall</h2>
-    <button id="btn-close-detail" aria-label="Tancar">×</button>
+    <div class="detail-header-actions">
+      <button id="btn-show-in-tree" class="link-btn" title="Veure a l'arbre">Veure a l'arbre →</button>
+      <button id="btn-close-detail" aria-label="Tancar">×</button>
+    </div>
   </div>
   <form id="detail-form" class="detail-form">
     <input type="hidden" id="f-id">
@@ -105,6 +169,7 @@
   </form>
 </aside>
 
+<!-- ============ PICKER ============ -->
 <div id="picker-overlay" class="overlay hidden">
   <div class="picker">
     <div class="picker-header">
@@ -118,6 +183,8 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
