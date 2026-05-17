@@ -61,6 +61,15 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 button.primary:hover { background: var(--accent-strong); }
 button.danger { color: var(--danger); border-color: #f1c2c2; }
 button.danger:hover { background: #fdecec; }
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: #fff; color: var(--text);
+  font-weight: 700; font-size: 14px; text-decoration: none;
+  cursor: pointer; transition: background .15s, border-color .15s;
+}
+.help-link:hover { background: var(--bg-soft); border-color: var(--accent); color: var(--accent); }
 .link-btn {
   background: none; border: none; color: var(--accent); padding: 4px 0; cursor: pointer;
   font-size: 13px;

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<title>Manual d'usuari — Arbre Genealògic Civit-Vives</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  @page :first { margin-top: 0; }
+  html, body { font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1f2937; line-height: 1.5; font-size: 11pt; }
+  body { margin: 0; background: #f3f4f6; }
+
+  /* Screen-only top navigation bar */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: #1e3a8a; color: white;
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .topbar a, .topbar button {
+    color: white; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+    padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 10pt; cursor: pointer;
+    font-family: inherit;
+  }
+  .topbar a:hover, .topbar button:hover { background: rgba(255,255,255,0.22); }
+  .topbar .title { flex: 1; font-weight: 600; font-size: 11pt; }
+
+  main { max-width: 200mm; margin: 0 auto; background: white; padding: 18mm 16mm; box-shadow: 0 0 20px rgba(0,0,0,0.08); }
+
+  @media print {
+    body { background: white; }
+    .topbar { display: none; }
+    main { max-width: none; margin: 0; padding: 0; box-shadow: none; }
+  }
+
+  /* Cover */
+  .cover {
+    min-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+    color: white;
+    margin: -18mm -16mm 0 -16mm;
+    padding: 18mm 16mm;
+  }
+  .cover h1 { font-size: 34pt; margin: 0 0 8mm 0; font-weight: 800; letter-spacing: -0.5pt; }
+  .cover .subtitle { font-size: 14pt; opacity: 0.92; margin-bottom: 30mm; font-weight: 300; }
+  .cover .branches { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 140mm; margin-bottom: 25mm; }
+  .cover .branch-chip { padding: 4px 10px; border-radius: 999px; font-size: 9pt; font-weight: 600; }
+  .cover .meta { font-size: 10pt; opacity: 0.85; margin-top: auto; padding-top: 30mm; }
+
+  h1 { font-size: 22pt; color: #1e3a8a; margin-top: 12mm; margin-bottom: 4mm; border-bottom: 2px solid #1e3a8a; padding-bottom: 2mm; page-break-after: avoid; scroll-margin-top: 60px; }
+  @media print { h1 { page-break-before: always; } h1.first { page-break-before: auto; } }
+  .cover { page-break-after: always; }
+  @media screen { .cover { margin-bottom: 12mm; } }
+  h2 { font-size: 14pt; color: #1e3a8a; margin-top: 7mm; margin-bottom: 3mm; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; color: #374151; margin-top: 5mm; margin-bottom: 2mm; page-break-after: avoid; }
+  p { margin: 0 0 3mm 0; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 6mm; }
+  li { margin-bottom: 1.5mm; }
+
+  code, .kbd { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 9.5pt; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; color: #be185d; }
+  .kbd { background: #e5e7eb; color: #1f2937; border: 1px solid #d1d5db; border-bottom-width: 2px; padding: 1px 6px; }
+  pre { background: #f9fafb; border-left: 3px solid #1e3a8a; padding: 3mm 4mm; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 9pt; line-height: 1.4; overflow-x: auto; border-radius: 0 4px 4px 0; margin: 3mm 0; page-break-inside: avoid; }
+
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 9.5pt; page-break-inside: avoid; }
+  th { background: #1e3a8a; color: white; text-align: left; padding: 2.5mm 3mm; font-weight: 600; }
+  td { padding: 2mm 3mm; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  td code { font-size: 8.5pt; }
+
+  .toc { background: #f9fafb; padding: 5mm 8mm; border-radius: 6px; margin: 5mm 0; }
+  .toc h2 { margin-top: 0; color: #1e3a8a; border: none; }
+  .toc ol { list-style: none; padding-left: 0; counter-reset: toc; }
+  .toc li { counter-increment: toc; padding: 1mm 0; }
+  .toc li::before { content: counter(toc) ". "; font-weight: 700; color: #1e3a8a; margin-right: 2mm; }
+  .toc li.sub { padding-left: 6mm; font-size: 9.5pt; color: #4b5563; }
+  .toc li.sub::before { content: none; }
+
+  .note, .tip, .warn { padding: 3mm 4mm; border-radius: 4px; margin: 3mm 0; page-break-inside: avoid; font-size: 10pt; }
+  .note { background: #eff6ff; border-left: 3px solid #2563eb; }
+  .tip { background: #ecfdf5; border-left: 3px solid #059669; }
+  .warn { background: #fff7ed; border-left: 3px solid #ea580c; }
+  .note::before, .tip::before, .warn::before { font-weight: 700; margin-right: 2mm; }
+  .note::before { content: "Nota."; color: #1d4ed8; }
+  .tip::before { content: "Truc."; color: #047857; }
+  .warn::before { content: "Atenció."; color: #c2410c; }
+
+  .branch-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 3mm 0; }
+  .branch-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 9pt; font-weight: 600; color: white; }
+  .b-civit{background:#d97706}.b-moncusi{background:#dc2626}.b-gomis{background:#16a34a}.b-dominguez{background:#0891b2}.b-lazaro{background:#7c3aed}.b-vives{background:#db2777}.b-prat{background:#0284c7}.b-cusido{background:#65a30d}.b-ld{background:#111827}
+
+  .two-col { column-count: 2; column-gap: 8mm; }
+  .step { display: flex; gap: 4mm; margin-bottom: 4mm; page-break-inside: avoid; }
+  .step-num { flex: 0 0 9mm; height: 9mm; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11pt; }
+  .step-body { flex: 1; }
+  .step-body strong { color: #1e3a8a; }
+
+  footer { position: fixed; bottom: 8mm; left: 16mm; right: 16mm; font-size: 8pt; color: #9ca3af; display: flex; justify-content: space-between; border-top: 1px solid #e5e7eb; padding-top: 2mm; }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <span class="title">Manual d'usuari — Arbre Genealògic Civit-Vives</span>
+  <a href="index.html">← Tornar a l'app</a>
+  <a href="Manual-Arbre-Genealogic.pdf" download>Descarregar PDF</a>
+  <button onclick="window.print()">Imprimir</button>
+</nav>
+
+<main>
+
+<div class="cover">
+  <h1>Arbre Genealògic<br>Civit-Vives</h1>
+  <div class="subtitle">Manual d'usuari · Versió 1.0</div>
+  <div class="branches">
+    <span class="branch-chip b-civit">Civit</span>
+    <span class="branch-chip b-moncusi">Moncusí</span>
+    <span class="branch-chip b-gomis">Gomis</span>
+    <span class="branch-chip b-dominguez">Domínguez</span>
+    <span class="branch-chip b-lazaro">Lázaro</span>
+    <span class="branch-chip b-vives">Vives</span>
+    <span class="branch-chip b-prat">Prat</span>
+    <span class="branch-chip b-cusido">Cusidó-Plana</span>
+    <span class="branch-chip b-ld">Línia directa</span>
+  </div>
+  <div class="meta">Maig 2026 · Aplicació web autònoma</div>
+</div>
+
+<div class="toc">
+  <h2>Índex</h2>
+  <ol>
+    <li><a href="#sec-1" style="color:inherit;text-decoration:none">Introducció</a></li>
+    <li><a href="#sec-2" style="color:inherit;text-decoration:none">Com obrir l'aplicació</a></li>
+    <li><a href="#sec-3" style="color:inherit;text-decoration:none">Les tres vistes</a></li>
+    <li><a href="#sec-4" style="color:inherit;text-decoration:none">Vista <em>Llista</em>: cercar i filtrar</a></li>
+    <li><a href="#sec-5" style="color:inherit;text-decoration:none">Afegir i editar persones</a></li>
+    <li><a href="#sec-6" style="color:inherit;text-decoration:none">Crear relacions (pares i cònjuges)</a></li>
+    <li><a href="#sec-7" style="color:inherit;text-decoration:none">Branques familiars</a></li>
+    <li><a href="#sec-8" style="color:inherit;text-decoration:none">Vista <em>Arbre</em></a></li>
+    <li><a href="#sec-9" style="color:inherit;text-decoration:none">Vista <em>Mapa</em></a></li>
+    <li><a href="#sec-10" style="color:inherit;text-decoration:none">Exportar i importar dades</a></li>
+    <li><a href="#sec-11" style="color:inherit;text-decoration:none">Format CSV detallat</a></li>
+    <li><a href="#sec-12" style="color:inherit;text-decoration:none">Trucs i preguntes freqüents</a></li>
+  </ol>
+</div>
+
+<h1 id="sec-1" class="first">1. Introducció</h1>
+<p>
+  Aquesta aplicació és una <strong>eina autònoma</strong> per consultar, editar i visualitzar
+  l'arbre genealògic de la família Civit-Vives. Funciona dins de qualsevol navegador
+  modern (Chrome, Firefox, Safari, Edge) i no requereix instal·lació ni servidor.
+</p>
+<p>
+  Inclou un cens de més de mil persones repartides en nou branques, amb dates,
+  llocs de naixement i defunció, i les seves relacions familiars. La informació
+  es pot consultar en tres formats: <strong>llista filtrable</strong>, <strong>arbre
+  genealògic visual</strong> i <strong>mapa geogràfic</strong>.
+</p>
+
+<h2>1.1 Què hi pots fer</h2>
+<ul>
+  <li>Cercar persones per nom, cognom, lloc o any (insensible a accents i majúscules).</li>
+  <li>Filtrar per branca familiar, per persones amb relacions, per aniversaris d'avui.</li>
+  <li>Afegir, editar o eliminar persones i les seves relacions.</li>
+  <li>Visualitzar l'arbre genealògic d'una persona, amb ascendents i descendents.</li>
+  <li>Veure la distribució geogràfica de la família en un mapa.</li>
+  <li>Importar i exportar les dades en JSON (backup complet) o en CSV (per editar a Excel).</li>
+</ul>
+
+<div class="note">
+  Les dades es guarden automàticament al teu navegador (<code>localStorage</code>). Si
+  obres l'aplicació en un altre dispositiu o navegador, els canvis que hi facis no
+  es traspassen sols — fes servir l'<strong>exportació JSON</strong> per moure-ho tot d'un
+  navegador a un altre.
+</div>
+
+<h1 id="sec-2">2. Com obrir l'aplicació</h1>
+
+<h2>2.1 Localment (sense internet)</h2>
+<p>
+  Obre el fitxer <code>index.html</code> amb un doble click. La vista de mapa
+  necessitarà connexió la primera vegada per descarregar les "tessel·les"
+  d'OpenStreetMap; la resta funciona sense xarxa.
+</p>
+
+<h2>2.2 Versió web pública (recomanat)</h2>
+<p>
+  L'aplicació també està publicada en línia. Demana l'enllaç a l'administrador
+  i podràs accedir-hi des de qualsevol dispositiu (mòbil, tauleta, ordinador).
+</p>
+
+<h1 id="sec-3">3. Les tres vistes</h1>
+<p>
+  A la barra superior trobaràs tres pestanyes que canvien la manera de veure les dades:
+</p>
+<table>
+  <thead><tr><th style="width:25mm">Pestanya</th><th>Què mostra</th><th>Quan usar-la</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Llista</strong></td><td>Totes les persones com a fitxes cercables</td><td>Per buscar algú concret o per editar-ne les dades</td></tr>
+    <tr><td><strong>Arbre</strong></td><td>Arbre genealògic centrat en una persona</td><td>Per veure relacions, ascendents i descendents</td></tr>
+    <tr><td><strong>Mapa</strong></td><td>Llocs de naixement i defunció</td><td>Per entendre la distribució geogràfica de la família</td></tr>
+  </tbody>
+</table>
+
+<h1 id="sec-4">4. Vista <em>Llista</em>: cercar i filtrar</h1>
+
+<h2>4.1 Cercador</h2>
+<p>
+  El quadre de cerca a la part superior filtra per <strong>nom, cognoms, lloc de
+  naixement, lloc de defunció i any</strong>. Tot d'una vegada.
+</p>
+<div class="tip">
+  La cerca és <strong>insensible a accents i majúscules</strong>. Escrivint
+  <code>dominguez</code> trobaràs també "Domínguez", "DOMÍNGUEZ" i "Domingùez".
+  No cal preocupar-se per la tipografia.
+</div>
+
+<h2>4.2 Filtres ràpids</h2>
+<ul>
+  <li><strong>Branques</strong>: clica un o més xips de colors per veure només
+    persones d'aquestes branques. Si no en seleccionas cap, es mostren totes.</li>
+  <li><strong>Només amb relacions</strong>: amaga persones que no tenen ni pares
+    ni cònjuges ni fills assignats.</li>
+  <li><strong>Només amb dates</strong>: amaga persones sense any de naixement ni defunció.</li>
+  <li><strong>Aniversaris d'avui</strong>: mostra qui compleix anys (o
+    aniversari de defunció) avui.</li>
+</ul>
+
+<h2>4.3 Ordenació</h2>
+<p>
+  El selector "Ordenar per" permet ordenar les fitxes per:
+</p>
+<ul>
+  <li>Cognom (per defecte)</li>
+  <li>Nom</li>
+  <li>Any de naixement (ascendent o descendent)</li>
+</ul>
+
+<h1 id="sec-5">5. Afegir i editar persones</h1>
+
+<h2>5.1 Afegir una persona nova</h2>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  Clica el botó <strong>+ Nova persona</strong> a la barra superior.
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  Omple els camps que coneguis. <strong>Cal almenys un nom o un cognom</strong>; la
+  resta és opcional.
+</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  Selecciona les branques familiars a les quals pertany (pots triar més d'una).
+</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-body">
+  Si cal, assigna pare, mare i cònjuges (vegeu la secció següent).
+</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-body">
+  Clica <strong>Guardar</strong>. Els canvis es desen automàticament al navegador.
+</div></div>
+
+<h2>5.2 Camps disponibles</h2>
+<table>
+  <thead><tr><th style="width:38mm">Camp</th><th>Format</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Nom</td><td>Text lliure</td><td>Ex.: "Joan Maria"</td></tr>
+    <tr><td>Primer / segon cognom</td><td>Text lliure</td><td>El segon és opcional</td></tr>
+    <tr><td>Data de naixement</td><td><code>DD/MM/AAAA</code></td><td>Si no saps el dia, deixa-ho buit i fes servir només "Any de naixement"</td></tr>
+    <tr><td>Any de naixement</td><td>Enter (ex. <code>1850</code>)</td><td>Es completa sol si has posat la data sencera</td></tr>
+    <tr><td>Lloc de naixement</td><td>Text lliure</td><td>Es geocodifica al mapa si reconeix el topònim</td></tr>
+    <tr><td>Data / any / lloc de defunció</td><td>Igual que naixement</td><td>Deixa buit per persones vives</td></tr>
+    <tr><td>Branques</td><td>Multi-selecció</td><td>Veure secció 7</td></tr>
+    <tr><td>Notes</td><td>Text lliure</td><td>Observacions, fonts, anècdotes</td></tr>
+  </tbody>
+</table>
+
+<h2>5.3 Editar o eliminar</h2>
+<ul>
+  <li>Clica una fitxa de la llista per obrir el panel d'edició.</li>
+  <li>El botó <strong>Eliminar</strong> esborra la persona; les relacions des d'altres persones cap a aquesta s'eliminen automàticament.</li>
+</ul>
+
+<div class="warn">
+  Eliminar una persona és immediat i no es pot desfer (excepte si tens un
+  backup JSON anterior). Si dubtes, exporta abans.
+</div>
+
+<h1 id="sec-6">6. Crear relacions (pares i cònjuges)</h1>
+
+<h2>6.1 Assignar pare o mare</h2>
+<p>
+  Dins de la fitxa d'edició, secció <strong>Pares</strong>, clica <em>+ Afegir</em>.
+  S'obrirà un cercador on pots buscar i triar la persona. Pots assignar fins a
+  dos progenitors. <strong>L'ordre és pare, mare</strong> en l'exportació CSV.
+</p>
+
+<h2>6.2 Assignar cònjuge</h2>
+<p>
+  A la secció <strong>Cònjuges</strong>, clica <em>+ Afegir</em> i tria la persona.
+  Una persona pot tenir <strong>diversos cònjuges</strong> (per a múltiples matrimonis).
+</p>
+<div class="tip">
+  Els cònjuges són <strong>bidireccionals automàticament</strong>: si dius que
+  A és cònjuge de B, la fitxa de B automàticament tindrà A com a cònjuge. No
+  cal anar a editar les dues fitxes.
+</div>
+
+<h2>6.3 Fills</h2>
+<p>
+  No s'assignen directament. Els fills d'una persona són automàticament
+  totes les persones que la tenen com a pare o mare. Per crear un fill,
+  edita el fill i afegeix els seus pares.
+</p>
+
+<h1 id="sec-7">7. Branques familiars</h1>
+<p>
+  Les nou branques representen les nou línies genealògiques principals:
+</p>
+
+<div class="branch-row">
+  <span class="branch-chip b-civit">Civit · Francesc Civit</span>
+  <span class="branch-chip b-moncusi">Moncusí · Francesc Moncusí</span>
+  <span class="branch-chip b-gomis">Gomis · Francesc Gomis</span>
+  <span class="branch-chip b-dominguez">Domínguez · Francesc Domínguez</span>
+  <span class="branch-chip b-lazaro">Lázaro · Francesc Lázaro</span>
+  <span class="branch-chip b-vives">Vives · Rosa Maria Vives</span>
+  <span class="branch-chip b-prat">Prat · Rosa Maria Prat</span>
+  <span class="branch-chip b-cusido">Cusidó-Plana · Rosa Maria Cusidó-Plana</span>
+  <span class="branch-chip b-ld">Línia directa</span>
+</div>
+
+<p>
+  Cada persona pot pertànyer a <strong>una o més branques</strong>. La branca
+  "Línia directa" identifica els avantpassats directes en línia
+  paterna/materna principal.
+</p>
+<p>
+  Els colors són consistents arreu de l'aplicació: a les fitxes,
+  als filtres, als nodes de l'arbre i als marcadors del mapa.
+</p>
+
+<h1 id="sec-8">8. Vista <em>Arbre</em></h1>
+<p>
+  Mostra l'arbre genealògic centrat en una persona. Conté:
+</p>
+<ul>
+  <li><strong>Ascendents</strong> a sobre (pares, avis, besavis)</li>
+  <li><strong>La persona enfocada</strong> al centre, amb els seus cònjuges</li>
+  <li><strong>Descendents</strong> a sota (fills, néts)</li>
+</ul>
+
+<h2>8.1 Navegació</h2>
+<ul>
+  <li><strong>Click</strong> en un node: <em>centra</em> l'arbre en aquella persona</li>
+  <li><strong>Doble click</strong>: obre el panel d'edició</li>
+  <li><strong>Arrossegar</strong> el llenç: desplaça la vista</li>
+  <li><strong>Roda del ratolí</strong>: zoom in / out</li>
+</ul>
+
+<h1 id="sec-9">9. Vista <em>Mapa</em></h1>
+<p>
+  Mostra els llocs de naixement i defunció de totes les persones del cens
+  (les que tenen un lloc reconegut). Els marcadors es <strong>cluster</strong>
+  automàticament quan són a prop, perquè el mapa no quedi saturat.
+</p>
+<ul>
+  <li>Clica un marcador per veure quines persones són d'aquell lloc.</li>
+  <li>Clica un cluster per fer zoom a la seva zona.</li>
+  <li>Els llocs es geocodifiquen automàticament la primera vegada que
+    s'afegeixen (cal connexió a internet).</li>
+</ul>
+
+<div class="note">
+  Si la vista de mapa surt en blanc, comprova que tens connexió a internet —
+  les imatges del mapa venen d'OpenStreetMap i necessiten descarregar-se.
+</div>
+
+<h1 id="sec-10">10. Exportar i importar dades</h1>
+<p>
+  L'aplicació suporta dos formats d'intercanvi de dades amb propòsits diferents:
+</p>
+
+<h2>10.1 Format JSON (backup complet)</h2>
+<table>
+  <thead><tr><th>Acció</th><th>Quan usar-la</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Exportar JSON</strong></td><td>Per fer una còpia de seguretat completa: persones, branques, llocs amb coordenades del mapa</td></tr>
+    <tr><td><strong>Importar JSON</strong></td><td>Per restaurar una còpia o per traslladar les dades d'un dispositiu a un altre</td></tr>
+  </tbody>
+</table>
+<div class="tip">
+  Fes un <strong>backup JSON setmanal</strong> si fas modificacions
+  freqüents. Guarda'l fora del navegador (Drive, Dropbox, etc.).
+</div>
+
+<h2>10.2 Format CSV (per editar a Excel)</h2>
+<table>
+  <thead><tr><th>Acció</th><th>Quan usar-la</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Exportar CSV</strong></td><td>Per editar les dades en bloc a Excel, Numbers o Google Sheets</td></tr>
+    <tr><td><strong>Importar CSV</strong></td><td>Per reintroduir les dades corregides a l'aplicació</td></tr>
+    <tr><td><strong>Plantilla</strong></td><td>Descarrega un CSV d'exemple per partir de zero</td></tr>
+  </tbody>
+</table>
+
+<h2>10.3 Flux de treball recomanat per corregir relacions</h2>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <strong>Exportar CSV</strong> — descarrega tot el cens actual amb identificadors llegibles (ex. <code>civit-joan-1850</code>).
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  Obre el fitxer amb Excel, Numbers o Google Sheets.
+</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  Compara amb la teva font original (arbre visual, registres parroquials, etc.) i corregeix les columnes <code>pare_id</code>, <code>mare_id</code> i <code>conjuges</code>.
+</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-body">
+  Desa el fitxer com a CSV (UTF-8).
+</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-body">
+  <strong>Importar CSV</strong> — el diàleg mostrarà un resum: quantes persones,
+  quantes referències invàlides. <strong>Si hi ha 0 invàlides, perfecte.</strong> Si n'hi ha
+  alguna, els avisos detallats apareixen a la consola del navegador (F12 →
+  Console).
+</div></div>
+
+<div class="warn">
+  Importar substitueix totes les dades actuals. Fes sempre una exportació
+  JSON com a backup abans d'una importació gran.
+</div>
+
+<h1 id="sec-11">11. Format CSV detallat</h1>
+<p>
+  El fitxer CSV té una fila per persona. La primera fila és la <strong>capçalera</strong>
+  amb els noms exactes de les columnes:
+</p>
+
+<pre>id,nom,cognom1,cognom2,naixement_data,naixement_lloc,
+defuncio_data,defuncio_lloc,branques,pare_id,mare_id,
+conjuges,notes</pre>
+
+<h2>11.1 Descripció de cada columna</h2>
+<table>
+  <thead><tr><th style="width:30mm">Columna</th><th>Tipus</th><th>Exemple</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>Identificador únic, slug en minúscules</td><td><code>civit-vives-joan-1850</code></td></tr>
+    <tr><td><code>nom</code></td><td>Text</td><td>Joan</td></tr>
+    <tr><td><code>cognom1</code></td><td>Text</td><td>Civit</td></tr>
+    <tr><td><code>cognom2</code></td><td>Text (opcional)</td><td>Vives</td></tr>
+    <tr><td><code>naixement_data</code></td><td><code>DD/MM/AAAA</code> o <code>AAAA</code></td><td><code>12/03/1850</code> · <code>1850</code></td></tr>
+    <tr><td><code>naixement_lloc</code></td><td>Text</td><td>Cornudella</td></tr>
+    <tr><td><code>defuncio_data</code></td><td>Idem naixement</td><td><code>05/11/1920</code></td></tr>
+    <tr><td><code>defuncio_lloc</code></td><td>Text</td><td>Reus</td></tr>
+    <tr><td><code>branques</code></td><td>Claus separades per <code>|</code></td><td><code>civit|ld</code></td></tr>
+    <tr><td><code>pare_id</code></td><td><code>id</code> d'una altra fila</td><td><code>civit-pere-1820</code></td></tr>
+    <tr><td><code>mare_id</code></td><td><code>id</code> d'una altra fila</td><td><code>vives-maria-1825</code></td></tr>
+    <tr><td><code>conjuges</code></td><td>Llista d'<code>id</code> amb <code>|</code></td><td><code>marti-anna-1855</code></td></tr>
+    <tr><td><code>notes</code></td><td>Text lliure</td><td>"Casat dos cops"</td></tr>
+  </tbody>
+</table>
+
+<h2>11.2 Claus de branca vàlides</h2>
+<p>
+  Els valors permesos a la columna <code>branques</code> (separats per <code>|</code>):
+</p>
+<ul style="columns: 3;">
+  <li><code>civit</code></li>
+  <li><code>moncusi</code></li>
+  <li><code>gomis</code></li>
+  <li><code>dominguez</code></li>
+  <li><code>lazaro</code></li>
+  <li><code>vives</code></li>
+  <li><code>prat</code></li>
+  <li><code>cusido_plana</code></li>
+  <li><code>ld</code> (línia directa)</li>
+</ul>
+
+<h2>11.3 Per què aquest format és fàcil de corregir</h2>
+<ol>
+  <li><strong>Una persona, una fila</strong> — pots ordenar per cognom a Excel i veure duplicats o errors tipogràfics d'un cop d'ull.</li>
+  <li><strong>Identificadors llegibles</strong> — quan una fila diu <code>pare_id = civit-pere-1820</code>, pots verificar de seguida si "Pere Civit nascut el 1820" és realment el pare correcte.</li>
+  <li><strong>Pare i mare en columnes separades</strong> — si t'has equivocat de gènere en un progenitor, només cal intercanviar els valors de les dues columnes.</li>
+  <li><strong>Validació en importar</strong> — qualsevol referència invàlida (un <code>pare_id</code> que no existeix) es mostra al diàleg <em>abans</em> d'aplicar els canvis.</li>
+  <li><strong>Cònjuges bidireccionals automàtics</strong> — només cal posar la relació en una de les dues files; la inversa es genera sola.</li>
+</ol>
+
+<h2>11.4 Detalls tècnics</h2>
+<ul>
+  <li><strong>Codificació</strong>: UTF-8 amb BOM (Excel ho detecta automàticament).</li>
+  <li><strong>Separador</strong>: coma <code>,</code> o punt i coma <code>;</code> — l'importador autodetecta segons quin sigui més freqüent.</li>
+  <li><strong>Cel·les amb comes, salts de línia o cometes</strong>: cal envoltar-les amb <code>"</code>. Les cometes dins es dupliquen: <code>"text amb ""cometes"" dins"</code>.</li>
+  <li><strong>Cel·les buides</strong>: signifiquen "desconegut", no zero.</li>
+</ul>
+
+<h1 id="sec-12">12. Trucs i preguntes freqüents</h1>
+
+<h2>Com puc fer un backup ràpid?</h2>
+<p>
+  <strong>Exportar JSON</strong> i guardar el fitxer descarregat a Google Drive
+  o similar. Es restaura amb <strong>Importar JSON</strong>.
+</p>
+
+<h2>He fet una importació i alguna cosa ha sortit malament</h2>
+<p>
+  Si tens un backup JSON previ, importa'l per recuperar l'estat anterior.
+  Si no, la dada anterior es perd: per això recomanem sempre fer un backup
+  abans de qualsevol importació gran.
+</p>
+
+<h2>L'aplicació no mostra els canvis que he fet</h2>
+<p>
+  Refresca amb <span class="kbd">Ctrl</span>+<span class="kbd">F5</span> (Windows/Linux) o <span class="kbd">⌘</span>+<span class="kbd">Maj</span>+<span class="kbd">R</span> (Mac).
+  Això força la càrrega de la versió més recent.
+</p>
+
+<h2>El mapa surt en blanc</h2>
+<p>
+  Comprova que tens connexió a internet. Els fons de mapa venen
+  d'OpenStreetMap i no s'inclouen dins de l'aplicació.
+</p>
+
+<h2>Vull restaurar les dades originals</h2>
+<p>
+  El botó <strong>Reiniciar</strong> torna a carregar el cens originalment
+  inclòs amb l'aplicació, descartant qualsevol modificació. <em>No es pot
+  desfer</em>: exporta abans si vols conservar els canvis.
+</p>
+
+<h2>Puc compartir les meves modificacions amb altres persones?</h2>
+<p>
+  Sí: <strong>Exporta JSON</strong>, envia el fitxer per correu o similar,
+  i l'altra persona només cal que faci <strong>Importa JSON</strong>.
+</p>
+
+<h2>Pot ser que dues persones tinguin el mateix <code>id</code> al CSV?</h2>
+<p>
+  No. Si això passa, l'importador descarta la segona i mostra un avís.
+  L'<code>id</code> ha de ser únic dins del fitxer.
+</p>
+
+<h2>Què passa si una data no està en format <code>DD/MM/AAAA</code>?</h2>
+<p>
+  Si el camp data és invàlid, l'aplicació rebutja el desat i et demana
+  corregir-lo. Per dates incompletes (només l'any) deixa el camp data
+  buit i fes servir només el camp any.
+</p>
+
+</main>
+</body>
+</html>
