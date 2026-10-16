@@ -50,6 +50,7 @@ function load() {
         State.people = parsed.people;
         State.branches = parsed.branches || window.__PRELOADED_DATA__.branches.slice();
         State.places = parsed.places || window.__PRELOADED_DATA__.places || {};
+        migratePeople();
         return;
       }
     } catch (e) { console.warn("Bad stored data", e); }
@@ -58,6 +59,189 @@ function load() {
   State.people = src.people.map(p => ({ ...p }));
   State.branches = src.branches.slice();
   State.places = src.places || {};
+  migratePeople();
+}
+
+/* Older data only had parentIds (unordered) and spouseIds. Split parents into
+   fatherId / motherId and turn each spouse into a marriage record. */
+function migratePeople() {
+  const ids = new Map(State.people.map(p => [p.id, p]));
+  for (const p of State.people) {
+    if (p.fatherId === undefined && p.motherId === undefined) {
+      let father = null, mother = null;
+      const rest = [];
+      for (const pid of (p.parentIds || [])) {
+        const q = ids.get(pid);
+        if (!q) continue;
+        const s1 = fold(q.surname1);
+        if (!father && s1 && s1 === fold(p.surname1)) father = pid;
+        else if (!mother && s1 && s1 === fold(p.surname2)) mother = pid;
+        else rest.push(pid);
+      }
+      for (const pid of rest) { if (!father) father = pid; else if (!mother) mother = pid; }
+      p.fatherId = father;
+      p.motherId = mother;
+    }
+    p.parentIds = [p.fatherId, p.motherId].filter(Boolean);
+    if (!Array.isArray(p.marriages)) p.marriages = [];
+  }
+  for (const p of State.people) {
+    for (const sid of p.spouseIds || []) {
+      if (p.marriages.some(m => m.spouseId === sid)) continue;
+      const sp = ids.get(sid);
+      if (!sp) continue;
+      const theirs = sp.marriages.find(m => m.spouseId === p.id);
+      const m = theirs
+        ? { ...theirs, spouseId: sid }
+        : { id: coupleMarriageId(p.id, sid), spouseId: sid, place: "", dateFull: null, year: null };
+      p.marriages.push(m);
+      if (!theirs) sp.marriages.push({ ...m, spouseId: p.id });
+    }
+  }
+  for (const p of State.people) p.spouseIds = spouseIdsOf(p);
+}
+
+function coupleMarriageId(a, b) { return "m-" + [a, b].sort().join("-"); }
+function newMarriageId() { return "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function spouseIdsOf(p) { return [...new Set((p.marriages || []).map(m => m.spouseId).filter(Boolean))]; }
+function marriageBetween(a, b) {
+  return (a.marriages || []).find(m => m.spouseId === b.id) ||
+         (b.marriages || []).find(m => m.spouseId === a.id) || null;
+}
+
+/* ============== Photos (IndexedDB) ==============
+   Keys: "<personId>:birth", "<personId>:death", "marriage:<marriageId>"
+   (a marriage photo is shared by both spouses). Values: JPEG data URLs. */
+
+const PhotoDB = (() => {
+  let dbp = null;
+  function open() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error("IndexedDB no disponible"));
+      const r = indexedDB.open("genealogyPhotos", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("photos");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(mode, fn) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction("photos", mode);
+      const req = fn(t.objectStore("photos"));
+      t.oncomplete = () => res(req ? req.result : undefined);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    });
+  }
+  return {
+    get: k => tx("readonly", st => st.get(k)),
+    put: (k, v) => tx("readwrite", st => st.put(v, k)),
+    del: k => tx("readwrite", st => st.delete(k)),
+    async all() {
+      const keys = await tx("readonly", st => st.getAllKeys());
+      const vals = await tx("readonly", st => st.getAll());
+      const out = {};
+      keys.forEach((k, i) => { out[k] = vals[i]; });
+      return out;
+    },
+  };
+})();
+
+function compressImage(file, maxSide = 2200, quality = 0.85) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * sc);
+      c.height = Math.round(img.height * sc);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("No s'ha pogut llegir la imatge")); };
+    img.src = url;
+  });
+}
+
+function photoLabel(key) {
+  if (key.endsWith(":birth")) return "naixement";
+  if (key.endsWith(":death")) return "defunció";
+  return "boda";
+}
+
+async function renderPhotoSlot(el, key) {
+  el.dataset.key = key || "";
+  el.innerHTML = "";
+  if (!key) {
+    el.innerHTML = `<span class="photo-empty">Desa la fitxa per poder afegir la foto del llibre.</span>`;
+    return;
+  }
+  let url = null;
+  try { url = await PhotoDB.get(key); } catch (e) { console.warn(e); }
+  if (el.dataset.key !== key) return;
+  const fs = el.closest(".marriage");
+  if (fs) fs.dataset.hasPhoto = url ? "1" : "";
+  const pick = () => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/jpeg,image/png,image/*";
+    inp.addEventListener("change", async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      try {
+        await PhotoDB.put(key, await compressImage(f));
+        toast("Foto desada");
+        renderPhotoSlot(el, key);
+      } catch (e) { alert("No s'ha pogut desar la foto: " + e.message); }
+    });
+    inp.click();
+  };
+  if (!url) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "link-btn photo-add";
+    b.textContent = `📷 Afegir foto del llibre (${photoLabel(key)})`;
+    b.addEventListener("click", pick);
+    el.appendChild(b);
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "photo-thumb";
+  wrap.innerHTML = `<img src="${url}" alt="Foto del llibre (${photoLabel(key)})">
+    <div class="photo-actions">
+      <button type="button" class="link-btn" data-act="view">Veure</button>
+      <button type="button" class="link-btn" data-act="change">Canviar</button>
+      <button type="button" class="link-btn danger-link" data-act="del">Treure</button>
+    </div>`;
+  const view = () => openPhotoViewer(url, `Foto del llibre — ${photoLabel(key)}`);
+  wrap.querySelector("img").addEventListener("click", view);
+  wrap.querySelector('[data-act="view"]').addEventListener("click", view);
+  wrap.querySelector('[data-act="change"]').addEventListener("click", pick);
+  wrap.querySelector('[data-act="del"]').addEventListener("click", async () => {
+    if (!confirm(`Vols treure la foto de ${photoLabel(key)}? No es podrà recuperar.`)) return;
+    await PhotoDB.del(key);
+    toast("Foto treta");
+    renderPhotoSlot(el, key);
+  });
+  el.appendChild(wrap);
+}
+
+function openPhotoViewer(url, title) {
+  $("#photo-title").textContent = title;
+  $("#photo-img").src = url;
+  $("#photo-download").href = url;
+  $("#photo-download").setAttribute("download", "foto-llibre.jpg");
+  $("#photo-overlay").classList.remove("hidden");
+}
+function closePhotoViewer() {
+  $("#photo-overlay").classList.add("hidden");
+  $("#photo-img").removeAttribute("src");
 }
 
 function persist() {
@@ -77,6 +261,7 @@ function resetData() {
   const ls = safeStorage();
   if (ls) ls.removeItem(STORAGE_KEY);
   load();
+  persist();
   renderAll();
   if (State.tree.focusId) renderTree();
   if (State.view === "map") drawMap();
@@ -134,6 +319,32 @@ function formatLifeDate(dateFull, yearFallback) {
   if (dt) return `${dt.d} ${MONTHS_CA[dt.m - 1]} ${dt.y}`;
   if (yearFallback) return String(yearFallback);
   return "";
+}
+
+/* "Lloc, data" — place first, then date (as written in the parish books). */
+function eventText(place, dateFull, year) {
+  return [place, formatLifeDate(dateFull, year)].filter(Boolean).join(", ");
+}
+
+/* Accepts DD/MM/AAAA or just AAAA. Returns null when the text is not valid. */
+function parseFlexibleDate(raw) {
+  const s = (raw || "").trim();
+  if (!s) return { dateFull: null, year: null };
+  if (/^\d{4}$/.test(s)) return { dateFull: null, year: +s };
+  const n = normalizeDateInput(s);
+  if (!n) return null;
+  return { dateFull: n, year: parseDDMMYYYY(n).y };
+}
+function flexibleDateText(dateFull, year) { return dateFull || (year != null ? String(year) : ""); }
+
+function searchTokens(q) { return fold(q).split(/\s+/).filter(Boolean); }
+function matchesTokens(hay, tokens) { return tokens.every(t => hay.includes(t)); }
+function nameHaystack(p) { return fold(`${p.firstName||""} ${p.surname1||""} ${p.surname2||""}`); }
+function searchHaystack(p) {
+  const parts = [p.firstName, p.surname1, p.surname2, p.birthPlace, p.deathPlace,
+                 p.birthYear, p.deathYear, p.birthDateFull, p.deathDateFull];
+  for (const m of p.marriages || []) parts.push(m.place, m.year, m.dateFull);
+  return fold(parts.filter(x => x != null && x !== "").join(" "));
 }
 
 function formatDayMonth(dateFull) {
@@ -237,9 +448,8 @@ function matchesFilter(p) {
     if (dateDayMonth(p.birthDateFull) !== td && dateDayMonth(p.deathDateFull) !== td) return false;
   }
   if (f.query) {
-    const q = fold(f.query);
-    const hay = fold(`${p.firstName} ${p.surname1} ${p.surname2} ${p.birthPlace||""} ${p.deathPlace||""} ${p.birthYear||""} ${p.deathYear||""}`);
-    if (!hay.includes(q)) return false;
+    // Every word must appear somewhere, in any order: "Joan Civit", "Civit Joan", "Joan 1850"…
+    if (!matchesTokens(searchHaystack(p), searchTokens(f.query))) return false;
   }
   return true;
 }
@@ -275,17 +485,24 @@ function renderPeopleList() {
     const surnames = (p.surname1 || p.surname2)
       ? `<div class="surnames">${escapeHtml([p.surname1, p.surname2].filter(Boolean).join(" "))}</div>`
       : "";
-    const span = lifeSpan(p);
-    const places = [p.birthPlace, p.deathPlace].filter(Boolean).join(" → ");
-    const dates = (span || places) ? `<div class="dates">${escapeHtml(span)}${span && places ? " · " : ""}${escapeHtml(places)}</div>` : "";
+    const evs = [];
+    const bt = eventText(p.birthPlace, p.birthDateFull, p.birthYear);
+    if (bt) evs.push(`<div class="ev"><span class="ev-ico" title="Naixement">★</span><span>${escapeHtml(bt)}</span></div>`);
+    (p.marriages || []).forEach((m, i) => {
+      const mt = eventText(m.place, m.dateFull, m.year);
+      const sp = m.spouseId ? byId(m.spouseId) : null;
+      if (!mt && !sp) return;
+      const label = p.marriages.length > 1 ? `Boda ${i + 1}` : "Boda";
+      evs.push(`<div class="ev"><span class="ev-ico" title="${label}">⚭</span><span>${escapeHtml(mt)}${sp ? `<span class="ev-with">${mt ? " · " : ""}amb ${escapeHtml(fullName(sp))}</span>` : ""}</span></div>`);
+    });
+    const dt = eventText(p.deathPlace, p.deathDateFull, p.deathYear);
+    if (dt) evs.push(`<div class="ev"><span class="ev-ico" title="Defunció">†</span><span>${escapeHtml(dt)}</span></div>`);
+    const dates = evs.length ? `<div class="events">${evs.join("")}</div>` : "";
     const tags = (p.branches||[]).map(k => `<span class="branch-tag ${k}">${branchShort(k)}</span>`).join("");
     const td = todayKey();
     const isAnniv = dateDayMonth(p.birthDateFull) === td || dateDayMonth(p.deathDateFull) === td;
     const annivBadge = isAnniv ? `<span class="anniv-badge" title="Aniversari avui">★</span>` : "";
-    const dateBadges = [];
-    if (p.birthDateFull) dateBadges.push(`<span class="date-badge birth" title="Naixement">★ ${escapeHtml(formatDayMonth(p.birthDateFull))}</span>`);
-    if (p.deathDateFull) dateBadges.push(`<span class="date-badge death" title="Defunció">† ${escapeHtml(formatDayMonth(p.deathDateFull))}</span>`);
-    const badgesHtml = dateBadges.length ? `<div class="date-badges">${dateBadges.join("")}${annivBadge}</div>` : (annivBadge ? `<div class="date-badges">${annivBadge}</div>` : "");
+    const badgesHtml = annivBadge ? `<div class="date-badges">${annivBadge}<span class="anniv-text">Aniversari avui</span></div>` : "";
     card.innerHTML = `${names}${surnames}${dates}${badgesHtml}${tags ? `<div class="branches">${tags}</div>` : ""}`;
     card.addEventListener("click", () => openDetail(p.id));
     frag.appendChild(card);
@@ -324,12 +541,16 @@ function openDetail(id) {
   }
 
   renderRelLists(p);
+  renderMarriageForms(p);
+  renderPhotoSlot($('[data-photo-slot="birth"]'), p ? `${p.id}:birth` : null);
+  renderPhotoSlot($('[data-photo-slot="death"]'), p ? `${p.id}:death` : null);
   $("#btn-delete").style.display = p ? "" : "none";
   $("#btn-show-in-tree").style.display = p ? "" : "none";
 
   const panel = $("#detail-panel");
   panel.classList.remove("hidden");
   panel.setAttribute("aria-hidden", "false");
+  panel.scrollTop = 0;
   setTimeout(() => $("#f-firstName").focus(), 50);
 }
 
@@ -341,8 +562,8 @@ function closeDetail() {
 }
 
 function renderRelLists(p) {
-  renderRelList("#f-parents", (p?.parentIds || []), "parents");
-  renderRelList("#f-spouses", (p?.spouseIds || []), "spouses");
+  renderRelList("#f-father", p?.fatherId ? [p.fatherId] : [], "father");
+  renderRelList("#f-mother", p?.motherId ? [p.motherId] : [], "mother");
   const kids = p ? childrenOf(p.id) : [];
   const childRoot = $("#f-children");
   childRoot.innerHTML = "";
@@ -354,13 +575,15 @@ function renderRelLists(p) {
     const item = document.createElement("span");
     item.className = "rel-item linkable";
     item.textContent = fullName(k) + (k.birthYear ? ` (${k.birthYear})` : "");
-    item.addEventListener("click", () => { saveCurrent(true); openDetail(k.id); });
+    item.addEventListener("click", () => { if (saveCurrent(true)) openDetail(k.id); });
     childRoot.appendChild(item);
   }
 }
 
-function renderRelList(sel, ids, kind) {
-  const root = $(sel);
+const REL_LABEL = { father: "el pare", mother: "la mare", spouse: "el cònjuge" };
+
+function renderRelList(sel, ids, kind, onRemove) {
+  const root = typeof sel === "string" ? $(sel) : sel;
   root.innerHTML = "";
   for (const id of ids) {
     const person = byId(id);
@@ -368,13 +591,18 @@ function renderRelList(sel, ids, kind) {
     const item = document.createElement("span");
     item.className = "rel-item linkable";
     item.innerHTML = `<span>${escapeHtml(fullName(person))}${person.birthYear ? " (" + person.birthYear + ")" : ""}</span>`;
-    item.addEventListener("click", () => { saveCurrent(true); openDetail(person.id); });
+    item.addEventListener("click", () => { if (saveCurrent(true)) openDetail(person.id); });
     const x = document.createElement("button");
     x.type = "button"; x.textContent = "×"; x.title = "Treure";
-    x.addEventListener("click", (e) => { e.stopPropagation(); removeRel(kind, id); });
+    x.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!confirm(`Vols treure ${fullName(person)} com a ${REL_LABEL[kind] || "relació"}?\n(La persona no s'esborra, només es desfà l'enllaç.)`)) return;
+      if (onRemove) onRemove(id); else removeRel(kind, id);
+    });
     item.appendChild(x);
     root.appendChild(item);
   }
+  if (!ids.length) root.innerHTML = `<span class="rel-empty">—</span>`;
   root.dataset.kind = kind;
   root.dataset.ids = JSON.stringify(ids);
 }
@@ -382,24 +610,84 @@ function renderRelList(sel, ids, kind) {
 function readRelIds(sel) { return JSON.parse($(sel).dataset.ids || "[]"); }
 
 function removeRel(kind, id) {
-  const sel = kind === "parents" ? "#f-parents" : "#f-spouses";
-  const ids = readRelIds(sel).filter(x => x !== id);
-  $(sel).dataset.ids = JSON.stringify(ids);
-  renderRelList(sel, ids, kind);
+  const sel = kind === "father" ? "#f-father" : "#f-mother";
+  renderRelList(sel, readRelIds(sel).filter(x => x !== id), kind);
 }
 
 function addRel(kind) {
-  const max = kind === "parents" ? 2 : Infinity;
-  const sel = kind === "parents" ? "#f-parents" : "#f-spouses";
-  const existing = readRelIds(sel);
-  if (existing.length >= max) { toast("Màxim 2 pares"); return; }
-  openPicker(kind === "parents" ? "Triar pare/mare" : "Triar cònjuge", (chosen) => {
-    if (existing.includes(chosen.id)) return;
+  const sel = kind === "father" ? "#f-father" : "#f-mother";
+  openPicker(kind === "father" ? "Triar pare" : "Triar mare", (chosen) => {
     if (State.editingId && chosen.id === State.editingId) { toast("No es pot enllaçar amb un mateix"); return; }
-    const next = [...existing, chosen.id];
-    $(sel).dataset.ids = JSON.stringify(next);
-    renderRelList(sel, next, kind);
+    renderRelList(sel, [chosen.id], kind);
   });
+}
+
+/* ---------- Marriages (Boda 1, Boda 2, …) ---------- */
+
+function renderMarriageForms(p) {
+  const root = $("#f-marriages");
+  root.innerHTML = "";
+  const list = (p?.marriages || []).map(m => ({ ...m }));
+  while (list.length < 2) list.push({ id: newMarriageId(), spouseId: null, place: "", dateFull: null, year: null });
+  list.forEach(m => appendMarriageForm(m, p));
+}
+
+function appendMarriageForm(m, p) {
+  const root = $("#f-marriages");
+  const fs = document.createElement("fieldset");
+  fs.className = "marriage";
+  fs.dataset.mid = m.id;
+  fs.dataset.spouseId = m.spouseId || "";
+  fs.innerHTML = `
+    <legend><span class="m-title"></span> <button type="button" class="link-btn danger-link m-remove" title="Treure aquesta boda">treure</button></legend>
+    <div class="rel-block">
+      <div class="rel-label">Cònjuge</div>
+      <div class="rel-list m-spouse"></div>
+      <button type="button" class="link-btn m-pick">+ Triar cònjuge</button>
+    </div>
+    <div class="row two">
+      <label>Lloc<input class="m-place" type="text" placeholder=" "></label>
+      <label>Data (DD/MM/AAAA o AAAA)<input class="m-date" type="text" placeholder="p.ex. 03/02/1875"></label>
+    </div>
+    <div class="photo-slot"></div>`;
+  fs.querySelector(".m-place").value = m.place || "";
+  fs.querySelector(".m-date").value = flexibleDateText(m.dateFull, m.year);
+  const drawSpouse = () => renderRelList(fs.querySelector(".m-spouse"), fs.dataset.spouseId ? [fs.dataset.spouseId] : [], "spouse",
+    () => { fs.dataset.spouseId = ""; drawSpouse(); });
+  drawSpouse();
+  fs.querySelector(".m-pick").addEventListener("click", () => {
+    openPicker("Triar cònjuge", (chosen) => {
+      if (State.editingId && chosen.id === State.editingId) { toast("No es pot enllaçar amb un mateix"); return; }
+      fs.dataset.spouseId = chosen.id;
+      drawSpouse();
+    });
+  });
+  fs.querySelector(".m-remove").addEventListener("click", () => {
+    const filled = fs.dataset.spouseId || fs.querySelector(".m-place").value.trim() || fs.querySelector(".m-date").value.trim() || fs.dataset.hasPhoto;
+    if (filled && !confirm("Vols treure aquesta boda? Es perdran les dades de la boda en desar.")) return;
+    fs.remove();
+    numberMarriageForms();
+  });
+  renderPhotoSlot(fs.querySelector(".photo-slot"), p ? `marriage:${m.id}` : null);
+  root.appendChild(fs);
+  numberMarriageForms();
+}
+
+function numberMarriageForms() {
+  $$("#f-marriages .marriage").forEach((fs, i) => { fs.querySelector(".m-title").textContent = `Boda ${i + 1}`; });
+}
+
+function readMarriagesFromForm() {
+  const out = [];
+  for (const fs of $$("#f-marriages .marriage")) {
+    const place = fs.querySelector(".m-place").value.trim();
+    const dt = parseFlexibleDate(fs.querySelector(".m-date").value);
+    if (!dt) return { error: "Format de data de boda no vàlid (cal DD/MM/AAAA o AAAA)" };
+    const spouseId = fs.dataset.spouseId || null;
+    if (!spouseId && !place && !dt.year && !fs.dataset.hasPhoto) continue;
+    out.push({ id: fs.dataset.mid, spouseId, place, dateFull: dt.dateFull, year: dt.year });
+  }
+  return { marriages: out };
 }
 
 /* ============== Picker ============== */
@@ -422,12 +710,12 @@ function closePicker() {
 
 function renderPickerResults(q) {
   const root = $("#picker-results");
-  const query = fold(q.trim());
+  const tokens = searchTokens(q);
   const filtered = State.people
     .filter(p => {
       if (State.editingId && p.id === State.editingId) return false;
-      if (!query) return true;
-      return fold(`${p.firstName} ${p.surname1} ${p.surname2}`).includes(query);
+      if (!tokens.length) return true;
+      return matchesTokens(nameHaystack(p), tokens);
     })
     .sort(compareForSort)
     .slice(0, 80);
@@ -453,6 +741,10 @@ function saveCurrent(silent = false) {
   const deathDateFull = normalizeDateInput($("#f-deathDateFull").value);
   const birthDateParsed = parseDDMMYYYY(birthDateFull);
   const deathDateParsed = parseDDMMYYYY(deathDateFull);
+  const fatherId = readRelIds("#f-father")[0] || null;
+  const motherId = readRelIds("#f-mother")[0] || null;
+  const mres = readMarriagesFromForm();
+  if (mres.error) { if (!silent) toast(mres.error); return false; }
   const data = {
     firstName: $("#f-firstName").value.trim(),
     surname1: $("#f-surname1").value.trim(),
@@ -465,8 +757,10 @@ function saveCurrent(silent = false) {
     deathYear: deathDateParsed ? deathDateParsed.y : intOrNull($("#f-deathYear").value),
     notes: $("#f-notes").value.trim(),
     branches: $$("#f-branches .chip.active").map(c => c.dataset.key),
-    parentIds: readRelIds("#f-parents"),
-    spouseIds: readRelIds("#f-spouses"),
+    fatherId,
+    motherId,
+    parentIds: [fatherId, motherId].filter(Boolean),
+    marriages: mres.marriages,
   };
   if (($("#f-birthDateFull").value || "").trim() && !birthDateFull) {
     if (!silent) toast("Format de data de naixement no vàlid (cal DD/MM/AAAA)");
@@ -480,16 +774,18 @@ function saveCurrent(silent = false) {
     if (!silent) toast("Cal almenys un nom o cognom");
     return false;
   }
+  let person;
   if (id) {
-    const p = byId(id);
-    Object.assign(p, data);
-    syncSpouses(p);
+    person = byId(id);
+    const prev = person.marriages || [];
+    Object.assign(person, data);
+    syncMarriages(person, prev);
   } else {
-    const newP = { id: nextId(), ...data };
-    State.people.push(newP);
-    syncSpouses(newP);
-    State.editingId = newP.id;
-    $("#f-id").value = newP.id;
+    person = { id: nextId(), ...data };
+    State.people.push(person);
+    syncMarriages(person, []);
+    State.editingId = person.id;
+    $("#f-id").value = person.id;
   }
   persist();
   renderPeopleList();
@@ -498,13 +794,28 @@ function saveCurrent(silent = false) {
   return true;
 }
 
-function syncSpouses(person) {
-  for (const sid of person.spouseIds || []) {
-    const sp = byId(sid);
-    if (!sp) continue;
-    sp.spouseIds = sp.spouseIds || [];
-    if (!sp.spouseIds.includes(person.id)) sp.spouseIds.push(person.id);
+/* A marriage is stored on both spouses with the same id, so its data and
+   photo stay the same whichever of the two is edited. */
+function syncMarriages(person, prev) {
+  for (const m of prev) {
+    if (!m.spouseId) continue;
+    if (person.marriages.some(x => x.id === m.id && x.spouseId === m.spouseId)) continue;
+    const sp = byId(m.spouseId);
+    if (sp) { sp.marriages = (sp.marriages || []).filter(x => x.id !== m.id); sp.spouseIds = spouseIdsOf(sp); }
   }
+  for (const m of person.marriages) {
+    const sp = m.spouseId ? byId(m.spouseId) : null;
+    if (!sp) continue;
+    sp.marriages = sp.marriages || [];
+    const mirror = { id: m.id, spouseId: person.id, place: m.place, dateFull: m.dateFull, year: m.year };
+    const i = sp.marriages.findIndex(x => x.id === m.id || x.spouseId === person.id);
+    if (i >= 0) sp.marriages[i] = mirror; else sp.marriages.push(mirror);
+    sp.spouseIds = spouseIdsOf(sp);
+  }
+  person.spouseIds = spouseIdsOf(person);
+  // Drop photos of marriages that nobody references any more.
+  const live = new Set(State.people.flatMap(q => (q.marriages || []).map(x => x.id)));
+  for (const m of prev) if (!live.has(m.id)) PhotoDB.del(`marriage:${m.id}`).catch(() => {});
 }
 
 function deleteCurrent() {
@@ -512,12 +823,24 @@ function deleteCurrent() {
   if (!id) { closeDetail(); return; }
   const p = byId(id);
   if (!p) { closeDetail(); return; }
-  if (!confirm(`Eliminar "${fullName(p)}"? Aquesta acció no es pot desfer.`)) return;
+  const kids = childrenOf(id).length;
+  const links = [
+    kids ? `${kids} fill(s) perdran aquest pare/mare` : "",
+    p.spouseIds && p.spouseIds.length ? `${p.spouseIds.length} cònjuge(s) quedaran sense aquest enllaç` : "",
+  ].filter(Boolean).join("\n· ");
+  if (!confirm(`Segur que vols ELIMINAR "${fullName(p)}"?\n\n${links ? "· " + links + "\n· " : "· "}També s'esborraran les seves fotos de naixement i defunció.\n\nAquesta acció no es pot desfer.`)) return;
   State.people = State.people.filter(x => x.id !== id);
   for (const x of State.people) {
+    if (x.fatherId === id) x.fatherId = null;
+    if (x.motherId === id) x.motherId = null;
     if (Array.isArray(x.parentIds)) x.parentIds = x.parentIds.filter(i => i !== id);
-    if (Array.isArray(x.spouseIds)) x.spouseIds = x.spouseIds.filter(i => i !== id);
+    // The spouse keeps the marriage data (place, date, photo), just without the link.
+    for (const m of x.marriages || []) if (m.spouseId === id) m.spouseId = null;
+    x.spouseIds = spouseIdsOf(x);
   }
+  PhotoDB.del(`${id}:birth`).catch(() => {});
+  PhotoDB.del(`${id}:death`).catch(() => {});
+  for (const m of p.marriages || []) if (!m.spouseId || !byId(m.spouseId)) PhotoDB.del(`marriage:${m.id}`).catch(() => {});
   persist();
   closeDetail();
   renderPeopleList();
@@ -532,7 +855,7 @@ function intOrNull(v) {
 
 /* ============== Tree view ============== */
 
-const NODE_W = 160, NODE_H = 56, COUPLE_GAP = 18, SIB_GAP = 22, GEN_GAP = 92;
+const NODE_W = 160, NODE_H = 56, COUPLE_GAP = 76, SIB_GAP = 22, GEN_GAP = 92;
 
 function renderTree() {
   const empty = !State.tree.focusId || !byId(State.tree.focusId);
@@ -544,6 +867,7 @@ function renderTree() {
   }
   const root = byId(State.tree.focusId);
   $("#tree-current").textContent = fullName(root);
+  hideTreeCard();
 
   // Build layout in two halves: ancestors above (rows 0..-up), descendants below (1..down).
   const layout = layoutTree(root, State.tree.gensUp, State.tree.gensDown);
@@ -599,7 +923,8 @@ function layoutTree(root, gensUp, gensDown) {
       links.push({
         from: { x: xL + NODE_W / 2, y: y + NODE_H / 2 },
         to:   { x: xR - NODE_W / 2, y: y + NODE_H / 2 },
-        kind: "spouse"
+        kind: "spouse",
+        marriage: marriageBetween(parents[0], parents[1]),
       });
       // Drop-down bus to the centerX child
       const busY = y + NODE_H + 12;
@@ -627,7 +952,8 @@ function layoutTree(root, gensUp, gensDown) {
     links.push({
       from: { x: focusX + NODE_W / 2, y: focusY + NODE_H / 2 },
       to:   { x: x - NODE_W / 2,       y: focusY + NODE_H / 2 },
-      kind: "spouse"
+      kind: "spouse",
+      marriage: marriageBetween(root, sp),
     });
   });
 
@@ -701,7 +1027,8 @@ function layoutTree(root, gensUp, gensDown) {
         links.push({
           from: { x: childNode.x + NODE_W / 2, y: y + NODE_H / 2 },
           to:   { x: sx - NODE_W / 2, y: y + NODE_H / 2 },
-          kind: "spouse"
+          kind: "spouse",
+          marriage: marriageBetween(k, sp),
         });
       });
 
@@ -765,16 +1092,45 @@ function drawTree(layout) {
     path.setAttribute("class", "tree-link " + (link.kind === "spouse" ? "spouse" : ""));
     g.appendChild(path);
   }
+  // Marriage data on the spouse lines: date above, place below.
+  for (const link of layout.links) {
+    if (link.kind !== "spouse" || !link.marriage) continue;
+    const m = link.marriage;
+    const date = formatLifeDate(m.dateFull, m.year);
+    if (!date && !m.place) continue;
+    const gap = Math.min(COUPLE_GAP, link.to.x - link.from.x);
+    const cx = link.to.x - gap / 2;
+    const cy = link.from.y;
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent = "Boda: " + eventText(m.place, m.dateFull, m.year);
+    const lg = document.createElementNS(SVG_NS, "g");
+    lg.setAttribute("class", "marriage-label");
+    lg.appendChild(title);
+    const t1 = document.createElementNS(SVG_NS, "text");
+    t1.setAttribute("x", cx); t1.setAttribute("y", cy - 6);
+    t1.setAttribute("text-anchor", "middle");
+    t1.textContent = "⚭ " + truncate(date || "", 12);
+    lg.appendChild(t1);
+    if (m.place) {
+      const t2 = document.createElementNS(SVG_NS, "text");
+      t2.setAttribute("x", cx); t2.setAttribute("y", cy + 13);
+      t2.setAttribute("text-anchor", "middle");
+      t2.textContent = truncate(m.place, 13);
+      lg.appendChild(t2);
+    }
+    g.appendChild(lg);
+  }
   // Nodes
   for (const node of layout.nodes) {
     const ng = document.createElementNS(SVG_NS, "g");
     ng.setAttribute("class", `tree-node ${node.role === "focus" ? "focus" : ""}`);
     ng.setAttribute("transform", `translate(${node.x - NODE_W/2}, ${node.y})`);
+    ng.dataset.id = node.id;
+    // A single click only selects the card and shows its data; the tree is
+    // re-centred from the card's button, so nothing "disappears" by accident.
     ng.addEventListener("click", (e) => {
       e.stopPropagation();
-      State.tree.focusId = node.id;
-      State.tree.pan = { x: 0, y: 0 };
-      renderTree();
+      showTreeCard(node.id);
     });
     ng.addEventListener("dblclick", () => openDetail(node.id));
 
@@ -834,6 +1190,49 @@ function drawTree(layout) {
   }
 }
 
+function showTreeCard(id) {
+  const p = byId(id);
+  const card = $("#tree-card");
+  $$("#tree-svg .tree-node.selected").forEach(n => n.classList.remove("selected"));
+  if (!p) { card.classList.add("hidden"); return; }
+  const el = $(`#tree-svg .tree-node[data-id="${id}"]`);
+  if (el) el.classList.add("selected");
+  const rows = [];
+  const bt = eventText(p.birthPlace, p.birthDateFull, p.birthYear);
+  if (bt) rows.push(`<div class="ev"><span class="ev-ico">★</span><span>${escapeHtml(bt)}</span></div>`);
+  (p.marriages || []).forEach((m, i) => {
+    const sp = m.spouseId ? byId(m.spouseId) : null;
+    const mt = eventText(m.place, m.dateFull, m.year);
+    if (!mt && !sp) return;
+    rows.push(`<div class="ev"><span class="ev-ico" title="Boda ${i + 1}">⚭</span><span>${escapeHtml(mt || "Boda")}${sp ? `<span class="ev-with"> · amb ${escapeHtml(fullName(sp))}</span>` : ""}</span></div>`);
+  });
+  const dt = eventText(p.deathPlace, p.deathDateFull, p.deathYear);
+  if (dt) rows.push(`<div class="ev"><span class="ev-ico">†</span><span>${escapeHtml(dt)}</span></div>`);
+  const isFocus = State.tree.focusId === id;
+  card.innerHTML = `
+    <button type="button" class="tree-card-close" aria-label="Tancar">×</button>
+    <div class="tree-card-name">${escapeHtml(fullName(p))}</div>
+    <div class="events">${rows.join("") || '<div class="ev muted">Sense dates registrades</div>'}</div>
+    <div class="tree-card-actions">
+      ${isFocus ? "" : '<button type="button" class="primary" data-act="center">Centrar l\'arbre aquí</button>'}
+      <button type="button" data-act="edit">Obrir fitxa</button>
+    </div>`;
+  card.querySelector(".tree-card-close").addEventListener("click", hideTreeCard);
+  const c = card.querySelector('[data-act="center"]');
+  if (c) c.addEventListener("click", () => {
+    State.tree.focusId = id;
+    State.tree.pan = { x: 0, y: 0 };
+    hideTreeCard();
+    renderTree();
+  });
+  card.querySelector('[data-act="edit"]').addEventListener("click", () => openDetail(id));
+  card.classList.remove("hidden");
+}
+function hideTreeCard() {
+  $("#tree-card").classList.add("hidden");
+  $$("#tree-svg .tree-node.selected").forEach(n => n.classList.remove("selected"));
+}
+
 function truncate(s, n) { s = String(s||""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
 
 /* Tree pan/zoom */
@@ -841,14 +1240,20 @@ function wireTreeInteraction() {
   const canvas = $("#tree-canvas");
   const svg = $("#tree-svg");
   let isDown = false; let startX = 0, startY = 0; let pStart = { x: 0, y: 0 };
+  canvas.addEventListener("click", (e) => {
+    if (!e.target.closest(".tree-node") && !e.target.closest("#tree-card") && !moved) hideTreeCard();
+  });
+  let moved = false;
   canvas.addEventListener("mousedown", (e) => {
-    if (e.target.closest(".tree-node")) return;
+    if (e.target.closest(".tree-node") || e.target.closest("#tree-card")) return;
+    moved = false;
     isDown = true; canvas.classList.add("dragging");
     startX = e.clientX; startY = e.clientY;
     pStart = { ...State.tree.pan };
   });
   window.addEventListener("mousemove", (e) => {
     if (!isDown) return;
+    if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 3) moved = true;
     State.tree.pan.x = pStart.x + (e.clientX - startX);
     State.tree.pan.y = pStart.y + (e.clientY - startY);
     applyTreeTransform();
@@ -974,9 +1379,11 @@ function buildPopup(bucket) {
 
 /* ============== Import / Export ============== */
 
-function exportJson() {
+async function exportJson() {
+  let photos = {};
+  try { photos = await PhotoDB.all(); } catch (e) { console.warn(e); }
   const blob = new Blob([JSON.stringify({
-    people: State.people, branches: State.branches, places: State.places,
+    people: State.people, branches: State.branches, places: State.places, photos,
   }, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -984,19 +1391,25 @@ function exportJson() {
   a.href = url; a.download = `arbre-genealogic-${today}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
-  toast("Exportat");
+  const n = Object.keys(photos).length;
+  toast(n ? `Exportat (amb ${n} fotos)` : "Exportat");
 }
 
 function importJson(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(reader.result);
       if (!parsed || !Array.isArray(parsed.people)) throw new Error("Format invàlid");
-      if (!confirm(`Importar ${parsed.people.length} persones? Es substituirà les dades actuals.`)) return;
+      const photos = parsed.photos && typeof parsed.photos === "object" ? Object.entries(parsed.photos) : [];
+      if (!confirm(`Importar ${parsed.people.length} persones${photos.length ? ` i ${photos.length} fotos` : ""}? Es substituirà les dades actuals.`)) return;
       State.people = parsed.people;
       if (Array.isArray(parsed.branches)) State.branches = parsed.branches;
       if (parsed.places && typeof parsed.places === "object") State.places = parsed.places;
+      migratePeople();
+      for (const [k, v] of photos) {
+        if (typeof v === "string" && v.startsWith("data:image/")) await PhotoDB.put(k, v);
+      }
       persist();
       renderAll();
       if (State.view === "tree") renderTree();
@@ -1010,15 +1423,19 @@ function importJson(file) {
 }
 
 /* ---------- CSV (human-editable) ---------- */
-// Columns: id, nom, cognom1, cognom2, naixement_data, naixement_lloc,
-//          defuncio_data, defuncio_lloc, branques, pare_id, mare_id,
-//          conjuges, notes
+// Columns: id, nom, cognom1, cognom2, naixement_lloc, naixement_data,
+//          boda1_conjuge, boda1_lloc, boda1_data, boda2_conjuge, boda2_lloc,
+//          boda2_data, defuncio_lloc, defuncio_data, branques, pare_id,
+//          mare_id, conjuges, notes
 // - Separator auto-detected (comma or semicolon).
 // - Multi-value cells use the pipe '|' (e.g. "civit|vives").
 // - Dates: "DD/MM/AAAA" or just "AAAA". Empty = unknown.
 // - IDs are free text slugs; references must match another row's id.
 
-const CSV_HEADER = ["id","nom","cognom1","cognom2","naixement_data","naixement_lloc","defuncio_data","defuncio_lloc","branques","pare_id","mare_id","conjuges","notes"];
+const CSV_HEADER = ["id","nom","cognom1","cognom2","naixement_lloc","naixement_data",
+  "boda1_conjuge","boda1_lloc","boda1_data","boda2_conjuge","boda2_lloc","boda2_data",
+  "defuncio_lloc","defuncio_data","branques","pare_id","mare_id","conjuges","notes"];
+const CSV_REQUIRED = ["id","nom","cognom1","cognom2","naixement_data"];
 
 function csvEscape(v) {
   const s = String(v ?? "");
@@ -1069,16 +1486,22 @@ function exportCsv() {
   for (const p of State.people) idMap.set(p.id, makeReadableId(p, used));
   const lines = [CSV_HEADER.join(",")];
   for (const p of State.people) {
-    const [fId, mId] = p.parentIds || [];
+    const fId = p.fatherId, mId = p.motherId;
+    const bodes = [0, 1].flatMap(i => {
+      const m = (p.marriages || [])[i];
+      if (!m) return ["", "", ""];
+      return [m.spouseId ? (idMap.get(m.spouseId) || "") : "", m.place || "", flexibleDateText(m.dateFull, m.year)];
+    });
     const row = [
       idMap.get(p.id),
       p.firstName || "",
       p.surname1 || "",
       p.surname2 || "",
-      p.birthDateFull || (p.birthYear != null ? String(p.birthYear) : ""),
       p.birthPlace || "",
-      p.deathDateFull || (p.deathYear != null ? String(p.deathYear) : ""),
+      p.birthDateFull || (p.birthYear != null ? String(p.birthYear) : ""),
+      ...bodes,
       p.deathPlace || "",
+      p.deathDateFull || (p.deathYear != null ? String(p.deathYear) : ""),
       (p.branches || []).join("|"),
       fId ? (idMap.get(fId) || "") : "",
       mId ? (idMap.get(mId) || "") : "",
@@ -1100,10 +1523,10 @@ function exportCsv() {
 function downloadCsvTemplate() {
   const sample = [
     CSV_HEADER.join(","),
-    "joan-civit-1850,Joan,Civit,Vives,12/03/1850,Cornudella,05/11/1920,Reus,civit|ld,pere-civit-1820,maria-vives-1825,anna-marti-1855,Exemple — esborra aquesta fila",
-    "pere-civit-1820,Pere,Civit,,1820,Cornudella,,,civit,,,maria-vives-1825,",
-    "maria-vives-1825,Maria,Vives,,1825,Reus,,,vives,,,pere-civit-1820,",
-    "anna-marti-1855,Anna,Martí,,1855,Reus,,,,,,joan-civit-1850,",
+    "joan-civit-1850,Joan,Civit,Vives,Cornudella,12/03/1850,anna-marti-1855,Reus,03/02/1875,,,,Reus,05/11/1920,civit|ld,pere-civit-1820,maria-vives-1825,anna-marti-1855,Exemple — esborra aquesta fila",
+    "pere-civit-1820,Pere,Civit,,Cornudella,1820,maria-vives-1825,Cornudella,1845,,,,,,civit,,,maria-vives-1825,",
+    "maria-vives-1825,Maria,Vives,,Reus,1825,pere-civit-1820,Cornudella,1845,,,,,,vives,,,pere-civit-1820,",
+    "anna-marti-1855,Anna,Martí,,Reus,1855,joan-civit-1850,Reus,03/02/1875,,,,,,,,,joan-civit-1850,",
   ].join("\n");
   const blob = new Blob(["﻿" + sample + "\n"], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1122,7 +1545,7 @@ function importCsv(file) {
       if (!rows.length) throw new Error("CSV buit");
       const header = rows[0].map(h => h.trim().toLowerCase());
       const colIdx = Object.fromEntries(CSV_HEADER.map(k => [k, header.indexOf(k)]));
-      const missing = CSV_HEADER.filter(k => colIdx[k] === -1 && !["notes","conjuges","pare_id","mare_id","branques","defuncio_data","defuncio_lloc","naixement_lloc"].includes(k));
+      const missing = CSV_REQUIRED.filter(k => colIdx[k] === -1);
       if (missing.length) throw new Error(`Falten columnes obligatòries: ${missing.join(", ")}`);
 
       const validBranches = new Set(State.branches.map(b => b.key));
@@ -1159,8 +1582,12 @@ function importCsv(file) {
           _pareId: get("pare_id"),
           _mareId: get("mare_id"),
           _conjuges: get("conjuges").split("|").map(s => s.trim()).filter(Boolean),
+          _bodes: [1, 2].map(k => ({ spouse: get(`boda${k}_conjuge`), place: get(`boda${k}_lloc`), date: get(`boda${k}_data`), row: r + 1 })),
+          fatherId: null,
+          motherId: null,
           parentIds: [],
           spouseIds: [],
+          marriages: [],
         };
         peopleByCsvId.set(id, p);
         people.push(p);
@@ -1169,24 +1596,44 @@ function importCsv(file) {
       let brokenRefs = 0;
       for (const p of people) {
         if (p._pareId) {
-          if (peopleByCsvId.has(p._pareId)) p.parentIds.push(p._pareId);
+          if (peopleByCsvId.has(p._pareId)) { p.fatherId = p._pareId; p.parentIds.push(p._pareId); }
           else { brokenRefs++; warnings.push(`"${p.id}": pare_id "${p._pareId}" no existeix`); }
         }
         if (p._mareId) {
-          if (peopleByCsvId.has(p._mareId)) p.parentIds.push(p._mareId);
+          if (peopleByCsvId.has(p._mareId)) { p.motherId = p._mareId; p.parentIds.push(p._mareId); }
           else { brokenRefs++; warnings.push(`"${p.id}": mare_id "${p._mareId}" no existeix`); }
         }
-        for (const c of p._conjuges) {
-          if (peopleByCsvId.has(c)) {
-            if (!p.spouseIds.includes(c)) p.spouseIds.push(c);
-            const sp = peopleByCsvId.get(c);
-            if (!sp.spouseIds.includes(p.id)) sp.spouseIds.push(p.id);
-          } else {
-            brokenRefs++; warnings.push(`"${p.id}": cònjuge "${c}" no existeix`);
+        for (const b of p._bodes) {
+          if (!b.spouse && !b.place && !b.date) continue;
+          let spouseId = b.spouse || null;
+          if (spouseId && !peopleByCsvId.has(spouseId)) {
+            brokenRefs++; warnings.push(`"${p.id}": cònjuge de boda "${spouseId}" no existeix`); spouseId = null;
           }
+          let dt = parseFlexibleDate(b.date);
+          if (!dt) { warnings.push(`Fila ${b.row}: data de boda "${b.date}" no vàlida`); dt = { dateFull: null, year: null }; }
+          p.marriages.push({ id: spouseId ? coupleMarriageId(p.id, spouseId) : newMarriageId(), spouseId, place: b.place, dateFull: dt.dateFull, year: dt.year });
         }
-        delete p._pareId; delete p._mareId; delete p._conjuges;
+        for (const c of p._conjuges) {
+          if (!peopleByCsvId.has(c)) { brokenRefs++; warnings.push(`"${p.id}": cònjuge "${c}" no existeix`); continue; }
+          if (!p.marriages.some(m => m.spouseId === c)) p.marriages.push({ id: coupleMarriageId(p.id, c), spouseId: c, place: "", dateFull: null, year: null });
+        }
+        delete p._pareId; delete p._mareId; delete p._conjuges; delete p._bodes;
       }
+      // Mirror every marriage on the other spouse (same id), filling gaps from whichever row has data.
+      for (const p of people) {
+        for (const m of p.marriages) {
+          if (!m.spouseId) continue;
+          const sp = peopleByCsvId.get(m.spouseId);
+          const other = sp.marriages.find(x => x.spouseId === p.id);
+          if (!other) { sp.marriages.push({ ...m, spouseId: p.id }); continue; }
+          const place = m.place || other.place;
+          const dateFull = m.dateFull || other.dateFull;
+          const year = m.year ?? other.year;
+          Object.assign(m, { place, dateFull, year });
+          Object.assign(other, { id: m.id, place, dateFull, year });
+        }
+      }
+      for (const p of people) p.spouseIds = spouseIdsOf(p);
 
       const summary = [
         `Importar ${people.length} persones?`,
@@ -1243,6 +1690,11 @@ function wireEvents() {
   });
 
   $$("[data-add]").forEach(b => b.addEventListener("click", () => addRel(b.dataset.add)));
+  $("#btn-add-marriage").addEventListener("click", () => {
+    appendMarriageForm({ id: newMarriageId(), spouseId: null, place: "", dateFull: null, year: null }, State.editingId ? byId(State.editingId) : null);
+  });
+  $("#photo-close").addEventListener("click", closePhotoViewer);
+  $("#photo-overlay").addEventListener("click", (e) => { if (e.target.id === "photo-overlay") closePhotoViewer(); });
 
   $("#picker-close").addEventListener("click", closePicker);
   $("#picker-overlay").addEventListener("click", (e) => { if (e.target.id === "picker-overlay") closePicker(); });
@@ -1282,7 +1734,8 @@ function wireEvents() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (State.picker.active) closePicker();
+      if (!$("#photo-overlay").classList.contains("hidden")) closePhotoViewer();
+      else if (State.picker.active) closePicker();
       else if (!$("#detail-panel").classList.contains("hidden")) closeDetail();
     }
   });
@@ -1297,4 +1750,5 @@ document.addEventListener("DOMContentLoaded", () => {
   // Set a default tree focus: pick someone with relations.
   const focus = State.people.find(p => (p.parentIds && p.parentIds.length) && (childrenOf(p.id).length));
   if (focus) State.tree.focusId = focus.id;
+  persist();
 });

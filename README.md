@@ -19,10 +19,18 @@ python3 -m http.server 8000
 > Si obres l'app sense connexió a internet, la **vista de Mapa** no carregarà
 > els tiles d'OpenStreetMap. La resta funciona en local.
 
-## Desplegar a GitHub Pages (1 click, automàtic)
+## Protecció amb contrasenya (Vercel)
 
-El repositori ja inclou un workflow (`.github/workflows/deploy-pages.yml`)
-que publica l'app cada cop que es fa un push. Només cal **activar Pages
+`middleware.js` protegeix tot el lloc (app, dades i manual) amb usuari i
+contrasenya (HTTP Basic Auth). A Vercel → *Project → Settings → Environment
+Variables* crea `APP_USER` i `APP_PASSWORD` i torna a desplegar. Mentre no
+estiguin definides, el lloc respon "Accés tancat" (mai queda obert).
+
+## Desplegar a GitHub Pages (manual, sense protecció)
+
+El repositori inclou un workflow (`.github/workflows/deploy-pages.yml`) que
+ara només s'executa a mà, perquè GitHub Pages no admet contrasenya i
+publicaria les dades obertes. Només cal **activar Pages
 una vegada** al repositori:
 
 1. Ves a **Settings → Pages** (a github.com/GHG-Accreditation/Arbre-CIVIT-VIVES/settings/pages)
@@ -66,7 +74,11 @@ amb les capçaleres de cache). Cap configuració addicional necessària.
 ## Tres vistes
 
 ### 1. Llista
-- Cercador per nom, cognoms, lloc o any.
+- Cercador per nom, cognoms, lloc o any, amb paraules en qualsevol ordre.
+- Cada fitxa mostra ★ naixement, ⚭ bodes i † defunció en ordre "lloc, data".
+- Detall amb camps Pare i Mare separats, Boda 1 / Boda 2 (cònjuge, lloc, data)
+  i foto del llibre (JPG) per naixement, cada boda i defunció (IndexedDB;
+  s'inclouen a "Exportar JSON").
 - Filtre per **branca** (chips multiselecció): Civit, Moncusí, Gomis, Domínguez,
   Lázaro, Vives, Prat, Cusidó-Plana i Línia Directa.
 - Ordenació per cognoms, nom o any de naixement.
@@ -77,7 +89,8 @@ amb les capçaleres de cache). Cap configuració addicional necessària.
 - Visualització SVG centrada en una persona.
 - Pots configurar quantes **generacions amunt** (ancestres) i **avall**
   (descendents) mostrar.
-- **Clic** en qualsevol node = re-centrar l'arbre en aquella persona.
+- **Clic** en un node = seleccionar-lo i veure'n les dades (botó "Centrar l'arbre aquí").
+- Data i lloc de la boda sobre la línia entre cònjuges.
 - **Doble clic** = obrir el detall per editar.
 - **Arrossegar** per moure'l, **roda del ratolí** o pessigada per fer zoom.
 - Cada node mostra el nom, cognoms, anys de vida i una franja de colors amb

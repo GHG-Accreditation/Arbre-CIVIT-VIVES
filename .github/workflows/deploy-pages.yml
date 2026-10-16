@@ -1,10 +1,8 @@
 name: Deploy to GitHub Pages
 
+# Manual only: GitHub Pages can't be password-protected, so publishing there
+# automatically would expose the data that Vercel now protects.
 on:
-  push:
-    branches:
-      - main
-      - claude/genealogy-tree-app-mw2SM
   workflow_dispatch:
 
 permissions:

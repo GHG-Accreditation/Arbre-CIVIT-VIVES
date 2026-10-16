@@ -37,7 +37,7 @@
 <!-- ============ LIST VIEW ============ -->
 <section id="view-list" class="view active">
   <div class="controls">
-    <input id="search" type="search" placeholder="Cerca per nom, cognom, lloc o any…" autofocus>
+    <input id="search" type="search" placeholder="Cerca per nom, cognoms, lloc o any (en qualsevol ordre)…" autofocus>
     <div class="sortbar">
       <label>Ordena per:
         <select id="sort">
@@ -86,6 +86,7 @@
   </div>
   <div id="tree-canvas" class="tree-canvas">
     <svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="tree-card" class="tree-card hidden"></div>
     <div id="tree-empty" class="empty-state">
       Tria una persona per veure l'arbre. La majoria de relacions s'han extret
       automàticament dels Excels originals; en falten algunes que pots completar
@@ -127,31 +128,37 @@
   <form id="detail-form" class="detail-form">
     <input type="hidden" id="f-id">
     <div class="row">
-      <label>Nom<input id="f-firstName" type="text" required></label>
+      <label>Nom<input id="f-firstName" type="text" placeholder=" " required></label>
     </div>
     <div class="row two">
-      <label>Cognom 1<input id="f-surname1" type="text"></label>
-      <label>Cognom 2<input id="f-surname2" type="text"></label>
+      <label>Cognom 1<input id="f-surname1" type="text" placeholder=" "></label>
+      <label>Cognom 2<input id="f-surname2" type="text" placeholder=" "></label>
     </div>
     <fieldset>
       <legend>Naixement</legend>
       <div class="row two">
-        <label>Lloc<input id="f-birthPlace" type="text"></label>
+        <label>Lloc<input id="f-birthPlace" type="text" placeholder=" "></label>
         <label>Data (DD/MM/AAAA)<input id="f-birthDateFull" type="text" placeholder="p.ex. 16/09/1607" pattern="\d{1,2}/\d{1,2}/\d{4}"></label>
       </div>
       <div class="row">
         <label>Si només saps l'any: <input id="f-birthYear" type="number" min="1300" max="2100" placeholder="p.ex. 1607"></label>
       </div>
+      <div class="photo-slot" data-photo-slot="birth"></div>
     </fieldset>
+    <div id="f-marriages"></div>
+    <div class="row">
+      <button type="button" id="btn-add-marriage" class="link-btn">+ Afegir una altra boda</button>
+    </div>
     <fieldset>
       <legend>Defunció</legend>
       <div class="row two">
-        <label>Lloc<input id="f-deathPlace" type="text"></label>
+        <label>Lloc<input id="f-deathPlace" type="text" placeholder=" "></label>
         <label>Data (DD/MM/AAAA)<input id="f-deathDateFull" type="text" placeholder="p.ex. 14/10/1674" pattern="\d{1,2}/\d{1,2}/\d{4}"></label>
       </div>
       <div class="row">
         <label>Si només saps l'any: <input id="f-deathYear" type="number" min="1300" max="2100" placeholder="p.ex. 1674"></label>
       </div>
+      <div class="photo-slot" data-photo-slot="death"></div>
     </fieldset>
     <div class="row">
       <label>Branques / arbres
@@ -159,24 +166,27 @@
       </label>
     </div>
     <fieldset>
-      <legend>Relacions</legend>
-      <div class="rel-block">
-        <div class="rel-label">Pares</div>
-        <div id="f-parents" class="rel-list"></div>
-        <button type="button" class="link-btn" data-add="parents">+ Afegir pare/mare</button>
-      </div>
-      <div class="rel-block">
-        <div class="rel-label">Cònjuges</div>
-        <div id="f-spouses" class="rel-list"></div>
-        <button type="button" class="link-btn" data-add="spouses">+ Afegir cònjuge</button>
+      <legend>Pares</legend>
+      <div class="row two">
+        <div class="rel-block">
+          <div class="rel-label">Pare</div>
+          <div id="f-father" class="rel-list"></div>
+          <button type="button" class="link-btn" data-add="father">+ Triar pare</button>
+        </div>
+        <div class="rel-block">
+          <div class="rel-label">Mare</div>
+          <div id="f-mother" class="rel-list"></div>
+          <button type="button" class="link-btn" data-add="mother">+ Triar mare</button>
+        </div>
       </div>
       <div class="rel-block">
         <div class="rel-label">Fills (derivat dels pares)</div>
         <div id="f-children" class="rel-list readonly"></div>
       </div>
     </fieldset>
+    <p class="photo-hint">Les fotos del llibre es guarden en aquest navegador. Fes “Exportar JSON” per tenir-ne còpia.</p>
     <div class="row">
-      <label>Notes<textarea id="f-notes" rows="4"></textarea></label>
+      <label>Notes<textarea id="f-notes" rows="4" placeholder=" "></textarea></label>
     </div>
     <div class="form-actions">
       <button type="submit" class="primary">Desar</button>
@@ -193,8 +203,22 @@
       <h3 id="picker-title">Triar persona</h3>
       <button id="picker-close" aria-label="Tancar">×</button>
     </div>
-    <input id="picker-search" type="search" placeholder="Cerca per nom o cognom…" autofocus>
+    <input id="picker-search" type="search" placeholder="Cerca per nom i/o cognoms…" autofocus>
     <div id="picker-results" class="picker-results"></div>
+  </div>
+</div>
+
+<!-- ============ PHOTO VIEWER ============ -->
+<div id="photo-overlay" class="overlay hidden">
+  <div class="photo-viewer">
+    <div class="picker-header">
+      <h3 id="photo-title">Foto</h3>
+      <div class="detail-header-actions">
+        <a id="photo-download" class="link-btn" download>Descarregar</a>
+        <button id="photo-close" aria-label="Tancar">×</button>
+      </div>
+    </div>
+    <div class="photo-body"><img id="photo-img" alt=""></div>
   </div>
 </div>
 

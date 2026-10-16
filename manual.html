@@ -192,6 +192,11 @@
   L'aplicació també està publicada en línia. Demana l'enllaç a l'administrador
   i podràs accedir-hi des de qualsevol dispositiu (mòbil, tauleta, ordinador).
 </p>
+<div class="note">
+  La versió web està <strong>protegida amb usuari i contrasenya</strong>. El navegador
+  els demana la primera vegada; demana'ls a l'administrador. Per tancar la sessió,
+  tanca el navegador.
+</div>
 
 <h1 id="sec-3">3. Les tres vistes</h1>
 <p>
@@ -211,7 +216,10 @@
 <h2>4.1 Cercador</h2>
 <p>
   El quadre de cerca a la part superior filtra per <strong>nom, cognoms, lloc de
-  naixement, lloc de defunció i any</strong>. Tot d'una vegada.
+  naixement, de boda i de defunció, i any</strong>. Pots escriure diverses paraules
+  <strong>en qualsevol ordre</strong>: <code>Joan Civit</code>, <code>Civit Joan</code>
+  o <code>Joan 1850</code> troben la mateixa persona. També pots cercar només pel nom,
+  sense cognoms.
 </p>
 <div class="tip">
   La cerca és <strong>insensible a accents i majúscules</strong>. Escrivint
@@ -254,7 +262,7 @@
   Selecciona les branques familiars a les quals pertany (pots triar més d'una).
 </div></div>
 <div class="step"><div class="step-num">4</div><div class="step-body">
-  Si cal, assigna pare, mare i cònjuges (vegeu la secció següent).
+  Si cal, assigna pare, mare i les bodes (vegeu la secció següent).
 </div></div>
 <div class="step"><div class="step-num">5</div><div class="step-body">
   Clica <strong>Guardar</strong>. Els canvis es desen automàticament al navegador.
@@ -269,41 +277,75 @@
     <tr><td>Data de naixement</td><td><code>DD/MM/AAAA</code></td><td>Si no saps el dia, deixa-ho buit i fes servir només "Any de naixement"</td></tr>
     <tr><td>Any de naixement</td><td>Enter (ex. <code>1850</code>)</td><td>Es completa sol si has posat la data sencera</td></tr>
     <tr><td>Lloc de naixement</td><td>Text lliure</td><td>Es geocodifica al mapa si reconeix el topònim</td></tr>
-    <tr><td>Data / any / lloc de defunció</td><td>Igual que naixement</td><td>Deixa buit per persones vives</td></tr>
+    <tr><td>Boda 1, Boda 2…</td><td>Cònjuge, lloc i data (<code>DD/MM/AAAA</code> o <code>AAAA</code>)</td><td>Amb <em>+ Afegir una altra boda</em> en pots posar més</td></tr>
+    <tr><td>Lloc / data / any de defunció</td><td>Igual que naixement</td><td>Deixa buit per persones vives</td></tr>
+    <tr><td>Foto del llibre</td><td>JPG o PNG</td><td>Una per naixement, una per cada boda i una per defunció</td></tr>
     <tr><td>Branques</td><td>Multi-selecció</td><td>Veure secció 7</td></tr>
     <tr><td>Notes</td><td>Text lliure</td><td>Observacions, fonts, anècdotes</td></tr>
   </tbody>
 </table>
 
-<h2>5.3 Editar o eliminar</h2>
+<div class="tip">
+  Els camps que ja tenen informació es mostren <strong>en negreta i amb lletra
+  més gran</strong>, perquè es vegi d'un cop d'ull què està omplert i què falta.
+  A la llista, cada fitxa mostra els esdeveniments en ordre <strong>lloc, data</strong>:
+  ★ naixement, ⚭ boda, † defunció.
+</div>
+
+<h2>5.3 Fotos del llibre (registre parroquial o civil)</h2>
+<ul>
+  <li>A cada apartat (Naixement, Boda 1, Boda 2…, Defunció) hi ha el botó
+    <strong>📷 Afegir foto del llibre</strong>. Tria una imatge JPG del mòbil o de l'ordinador.</li>
+  <li>La foto es desa a l'instant (no cal clicar Desar). Clica la miniatura per
+    veure-la gran o descarregar-la; <em>Canviar</em> la substitueix i <em>Treure</em> l'esborra
+    (abans demana confirmació).</li>
+  <li>La foto d'una boda és la mateixa per als dos cònjuges.</li>
+  <li>Cal haver desat la fitxa almenys un cop abans d'afegir fotos a una persona nova.</li>
+</ul>
+<div class="warn">
+  Les fotos es guarden <strong>només en aquest navegador</strong>. Fes servir
+  <strong>Exportar JSON</strong> (inclou les fotos) per tenir-ne còpia o passar-les a un altre ordinador.
+</div>
+
+<h2>5.4 Editar o eliminar</h2>
 <ul>
   <li>Clica una fitxa de la llista per obrir el panel d'edició.</li>
   <li>El botó <strong>Eliminar</strong> esborra la persona; les relacions des d'altres persones cap a aquesta s'eliminen automàticament.</li>
+  <li>Abans d'esborrar qualsevol cosa (una persona, un enllaç de pare/mare/cònjuge, una boda o una foto)
+    l'aplicació <strong>pregunta sempre si vols suprimir-ho</strong>.</li>
 </ul>
 
 <div class="warn">
-  Eliminar una persona és immediat i no es pot desfer (excepte si tens un
+  Un cop confirmada, l'eliminació no es pot desfer (excepte si tens un
   backup JSON anterior). Si dubtes, exporta abans.
 </div>
 
 <h1 id="sec-6">6. Crear relacions (pares i cònjuges)</h1>
 
-<h2>6.1 Assignar pare o mare</h2>
+<h2>6.1 Assignar pare i mare</h2>
 <p>
-  Dins de la fitxa d'edició, secció <strong>Pares</strong>, clica <em>+ Afegir</em>.
-  S'obrirà un cercador on pots buscar i triar la persona. Pots assignar fins a
-  dos progenitors. <strong>L'ordre és pare, mare</strong> en l'exportació CSV.
+  Dins de la fitxa d'edició, secció <strong>Pares</strong>, hi ha dos camps separats:
+  <strong>Pare</strong> i <strong>Mare</strong>. Clica <em>+ Triar pare</em> o <em>+ Triar mare</em>
+  i busca la persona. Per treure'n un, clica la <strong>×</strong> (demana confirmació).
 </p>
+<div class="note">
+  Les relacions extretes dels Excels no indicaven qui era el pare i qui la mare.
+  L'aplicació ho ha deduït pels cognoms (el primer cognom del pare coincideix amb
+  el primer del fill; el de la mare amb el segon). Si en algun cas surt al revés,
+  corregeix-ho des d'aquests dos camps.
+</div>
 
-<h2>6.2 Assignar cònjuge</h2>
+<h2>6.2 Bodes i cònjuges</h2>
 <p>
-  A la secció <strong>Cònjuges</strong>, clica <em>+ Afegir</em> i tria la persona.
-  Una persona pot tenir <strong>diversos cònjuges</strong> (per a múltiples matrimonis).
+  Cada fitxa té els apartats <strong>Boda 1</strong> i <strong>Boda 2</strong>
+  (i més amb <em>+ Afegir una altra boda</em>). A cadascun pots indicar el
+  <strong>cònjuge</strong>, el <strong>lloc</strong> i la <strong>data</strong> de la boda
+  i afegir-hi la foto del llibre.
 </p>
 <div class="tip">
-  Els cònjuges són <strong>bidireccionals automàticament</strong>: si dius que
-  A és cònjuge de B, la fitxa de B automàticament tindrà A com a cònjuge. No
-  cal anar a editar les dues fitxes.
+  Les bodes són <strong>bidireccionals automàticament</strong>: si poses que
+  A es va casar amb B a Reus el 1875, la fitxa de B tindrà la mateixa boda
+  amb les mateixes dades. No cal anar a editar les dues fitxes.
 </div>
 
 <h2>6.3 Fills</h2>
@@ -352,8 +394,12 @@
 
 <h2>8.1 Navegació</h2>
 <ul>
-  <li><strong>Click</strong> en un node: <em>centra</em> l'arbre en aquella persona</li>
-  <li><strong>Doble click</strong>: obre el panel d'edició</li>
+  <li><strong>Click</strong> en una fitxa: la <em>selecciona</em> (vora blava) i mostra
+    una targeta amb el naixement, les bodes i la defunció. La fitxa no desapareix.</li>
+  <li>A la targeta: <strong>Centrar l'arbre aquí</strong> per veure els seus avantpassats i
+    descendents, o <strong>Obrir fitxa</strong> per editar-la.</li>
+  <li><strong>Doble click</strong>: obre directament el panel d'edició</li>
+  <li>Sobre la línia discontínua entre dos cònjuges es mostren la <strong>data i el lloc de la boda</strong>.</li>
   <li><strong>Arrossegar</strong> el llenç: desplaça la vista</li>
   <li><strong>Roda del ratolí</strong>: zoom in / out</li>
 </ul>
@@ -435,9 +481,10 @@
   amb els noms exactes de les columnes:
 </p>
 
-<pre>id,nom,cognom1,cognom2,naixement_data,naixement_lloc,
-defuncio_data,defuncio_lloc,branques,pare_id,mare_id,
-conjuges,notes</pre>
+<pre>id,nom,cognom1,cognom2,naixement_lloc,naixement_data,
+boda1_conjuge,boda1_lloc,boda1_data,boda2_conjuge,boda2_lloc,
+boda2_data,defuncio_lloc,defuncio_data,branques,pare_id,
+mare_id,conjuges,notes</pre>
 
 <h2>11.1 Descripció de cada columna</h2>
 <table>
@@ -447,10 +494,14 @@ conjuges,notes</pre>
     <tr><td><code>nom</code></td><td>Text</td><td>Joan</td></tr>
     <tr><td><code>cognom1</code></td><td>Text</td><td>Civit</td></tr>
     <tr><td><code>cognom2</code></td><td>Text (opcional)</td><td>Vives</td></tr>
-    <tr><td><code>naixement_data</code></td><td><code>DD/MM/AAAA</code> o <code>AAAA</code></td><td><code>12/03/1850</code> · <code>1850</code></td></tr>
     <tr><td><code>naixement_lloc</code></td><td>Text</td><td>Cornudella</td></tr>
-    <tr><td><code>defuncio_data</code></td><td>Idem naixement</td><td><code>05/11/1920</code></td></tr>
+    <tr><td><code>naixement_data</code></td><td><code>DD/MM/AAAA</code> o <code>AAAA</code></td><td><code>12/03/1850</code> · <code>1850</code></td></tr>
+    <tr><td><code>boda1_conjuge</code></td><td><code>id</code> d'una altra fila</td><td><code>marti-anna-1855</code></td></tr>
+    <tr><td><code>boda1_lloc</code></td><td>Text</td><td>Reus</td></tr>
+    <tr><td><code>boda1_data</code></td><td>Idem naixement</td><td><code>03/02/1875</code></td></tr>
+    <tr><td><code>boda2_…</code></td><td>Igual que boda 1</td><td>Segona boda (opcional)</td></tr>
     <tr><td><code>defuncio_lloc</code></td><td>Text</td><td>Reus</td></tr>
+    <tr><td><code>defuncio_data</code></td><td>Idem naixement</td><td><code>05/11/1920</code></td></tr>
     <tr><td><code>branques</code></td><td>Claus separades per <code>|</code></td><td><code>civit|ld</code></td></tr>
     <tr><td><code>pare_id</code></td><td><code>id</code> d'una altra fila</td><td><code>civit-pere-1820</code></td></tr>
     <tr><td><code>mare_id</code></td><td><code>id</code> d'una altra fila</td><td><code>vives-maria-1825</code></td></tr>
