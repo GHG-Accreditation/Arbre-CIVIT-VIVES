@@ -430,3 +430,7 @@ button.danger:hover { background: #fdecec; }
 .detail-form input, .detail-form textarea { width: 100%; min-width: 0; }
 .detail-form .row.two > * { min-width: 0; }
 .ev-ico, .marriage-label text { font-family: "Segoe UI Symbol", "Noto Sans Symbols", "Noto Sans Symbols 2", "DejaVu Sans", "Apple Symbols", sans-serif; }
+.logout-link { font-size: 13px; color: var(--text-soft); text-decoration: none; padding: 6px 4px; }
+.logout-link:hover { color: var(--accent); text-decoration: underline; }
+/* "Sortir" only makes sense on the protected web version */
+.local-file .logout-link { display: none; }

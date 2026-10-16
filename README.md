@@ -19,12 +19,31 @@ python3 -m http.server 8000
 > Si obres l'app sense connexió a internet, la **vista de Mapa** no carregarà
 > els tiles d'OpenStreetMap. La resta funciona en local.
 
-## Protecció amb contrasenya (Vercel)
+## Accés amb login (Vercel)
 
-`middleware.js` protegeix tot el lloc (app, dades i manual) amb usuari i
-contrasenya (HTTP Basic Auth). A Vercel → *Project → Settings → Environment
-Variables* crea `APP_USER` i `APP_PASSWORD` i torna a desplegar. Mentre no
-estiguin definides, el lloc respon "Accés tancat" (mai queda obert).
+`middleware.js` protegeix tot el lloc (app, dades i manual) amb una pantalla
+de login:
+
+- Contrasenyes de **mínim 10 caràcters** i **3 de 4 tipus** (minúscula,
+  majúscula, número, símbol). Un usuari amb contrasenya feble no pot entrar.
+- **5 intents fallits** (per usuari o per IP) bloquegen l'accés **15 minuts**;
+  passat aquest temps es desbloqueja sol.
+- Sessió signada (cookie HttpOnly, Secure, SameSite=Strict) de 8 hores.
+  Botó **Sortir** a la barra superior.
+
+Configuració a Vercel → *Project → Settings → Environment Variables*
+(marca-les com a *Sensitive*):
+
+| Variable | Valor |
+|---|---|
+| `APP_USERS` | `usuari:Contrasenya, altre:AltraContrasenya` |
+| `SESSION_SECRET` | 32+ caràcters aleatoris (`openssl rand -base64 48`) |
+
+I la base de dades dels comptadors d'intents: Vercel → *Storage* →
+*Upstash for Redis* (pla gratuït) → *Connect to project*. Això crea
+automàticament `KV_REST_API_URL` i `KV_REST_API_TOKEN`. Després, *Redeploy*.
+
+Si falta qualsevol d'aquests valors el lloc queda tancat (mai obert).
 
 ## Desplegar a GitHub Pages (manual, sense protecció)
 

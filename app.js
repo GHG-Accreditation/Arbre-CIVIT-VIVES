@@ -1744,6 +1744,7 @@ function wireEvents() {
 /* ============== Init ============== */
 
 document.addEventListener("DOMContentLoaded", () => {
+  if (location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) document.body.classList.add("local-file");
   load();
   wireEvents();
   renderAll();
